@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Oneflow</string>
+    <string name="accessibility_service_description">Oneflow FlowAccess: reads active-window UI structure (excluding password/protected fields) and performs user-authorized actions with emergency stop.</string>
 </resources>

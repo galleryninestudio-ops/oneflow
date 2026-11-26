@@ -19,12 +19,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Enforce pure core module isolation (no android imports)
         run: |
-          if grep -rn "import android\." core/ execution/; then
-            echo "ERROR: Android imports found in pure core/execution modules"
+          if grep -rn "import android\." core/ execution/ capabilities/ platform/; then
+            echo "ERROR: Android imports found in pure core/execution/capabilities/platform modules"
             exit 1
           fi
       - name: Run pure JVM unit & contract tests
-        run: ./gradlew :core:contracts:test :core:kernel:test :core:models:test :core:intelligence:test :execution:broker:test :capabilities:files:test :platform:runtime:test :capabilities:development:test :capabilities:research:test --console=plain
+        run: ./gradlew :core:contracts:test :core:kernel:test :core:models:test :core:intelligence:test :execution:broker:test :capabilities:files:test :platform:runtime:test :capabilities:development:test :capabilities:research:test :capabilities:computer-use:test --console=plain
 
   native-pocs:
     runs-on: ubuntu-latest

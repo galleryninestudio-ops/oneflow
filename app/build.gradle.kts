@@ -50,12 +50,15 @@ dependencies {
     implementation(project(":capabilities:files"))
     implementation(project(":capabilities:development"))
     implementation(project(":capabilities:research"))
+    implementation(project(":capabilities:computer-use"))
     implementation(project(":platform:runtime"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.webkit)
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

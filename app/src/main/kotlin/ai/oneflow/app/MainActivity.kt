@@ -12,14 +12,18 @@ import ai.oneflow.capabilities.research.UrlPolicyCheck
 import ai.oneflow.core.contracts.ChatRole
 import ai.oneflow.core.contracts.MissionState
 import ai.oneflow.core.contracts.ProviderPresets
+import android.content.Intent
 import android.os.Bundle
+import android.provider.Settings
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewFeature
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -60,6 +64,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.Dispatchers
@@ -736,6 +741,71 @@ private fun SetupTab(
                         onClick = { controller.setWorkspacePermissions(read = state.workspaceReadGranted, write = !state.workspaceWriteGranted) }
                     ) {
                         Text(if (state.workspaceWriteGranted) "Write: GRANTED" else "Write: DENIED")
+                    }
+                }
+            }
+        }
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = OneflowColors.Surface),
+            border = BorderStroke(1.dp, if (state.emergencyStopped) OneflowColors.Error else OneflowColors.Border),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            val ctx = LocalContext.current
+            val mpLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                controller.mediaProjectionManager.onConsentResult(result.resultCode, result.data)
+                controller.refreshComputerUseStatus()
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(14.dp)) {
+                Text("FlowAccess & Computer Use (Phase 6)", style = MaterialTheme.typography.titleSmall, color = OneflowColors.TextPrimary)
+                Text(
+                    "Accessibility=${if (state.accessibilityEnabled) "CONNECTED" else "DISABLED"} · Shizuku=${state.shizukuStatus.note} · ScreenCapture=${state.mediaProjectionState.status.name}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OneflowColors.TextSecondary
+                )
+                state.lastUiSnapshotSummary?.let { snapSummary ->
+                    Text("Snapshot: $snapSummary", style = MaterialTheme.typography.bodySmall, color = OneflowColors.TextSecondary)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    Button(
+                        onClick = {
+                            if (state.emergencyStopped) controller.clearEmergencyStop()
+                            else controller.triggerEmergencyStop()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (state.emergencyStopped) OneflowColors.Warning else OneflowColors.Error,
+                            contentColor = OneflowColors.Background
+                        )
+                    ) {
+                        Text(if (state.emergencyStopped) "Resume (Clear Stop)" else "EMERGENCY STOP")
+                    }
+                    OutlinedButton(onClick = { controller.refreshComputerUseStatus() }) {
+                        Text("Refresh Status")
+                    }
+                    OutlinedButton(onClick = {
+                        ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }) {
+                        Text("Accessibility Settings")
+                    }
+                    OutlinedButton(onClick = { controller.requestShizukuPermissionOrBind() }) {
+                        Text("Bind Shizuku")
+                    }
+                    OutlinedButton(onClick = {
+                        mpLauncher.launch(controller.mediaProjectionManager.createConsentIntent())
+                    }) {
+                        Text("Grant Screen Capture")
+                    }
+                    OutlinedButton(onClick = {
+                        controller.mediaProjectionManager.stopAndRevoke()
+                        controller.refreshComputerUseStatus()
+                    }) {
+                        Text("Stop Capture")
+                    }
+                    OutlinedButton(onClick = { controller.captureActiveUiTreePreview() }) {
+                        Text("Capture UI Tree")
                     }
                 }
             }

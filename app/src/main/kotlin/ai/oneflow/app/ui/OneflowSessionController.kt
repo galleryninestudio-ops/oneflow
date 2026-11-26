@@ -1,5 +1,8 @@
 package ai.oneflow.app.ui
 
+import ai.oneflow.app.computeruse.MediaProjectionConsentManager
+import ai.oneflow.app.computeruse.OneflowAccessibilityService
+import ai.oneflow.app.computeruse.ShizukuBridge
 import ai.oneflow.app.data.LocalFixtureServer
 import ai.oneflow.app.data.ProviderRepository
 import ai.oneflow.app.data.ProviderStoreState
@@ -7,6 +10,10 @@ import ai.oneflow.app.probe.CapabilityProbe
 import ai.oneflow.app.probe.Phase0Diagnostics
 import ai.oneflow.app.vault.AndroidKeystoreVault
 import ai.oneflow.app.worker.AndroidIsolatedQuickJsEngine
+import ai.oneflow.capabilities.computeruse.ComputerUseTools
+import ai.oneflow.capabilities.computeruse.FlowAccessRouter
+import ai.oneflow.capabilities.computeruse.MediaProjectionState
+import ai.oneflow.capabilities.computeruse.ShizukuBridgeStatus
 import ai.oneflow.capabilities.development.DevKitCatalog
 import ai.oneflow.capabilities.development.DevKitStatus
 import ai.oneflow.capabilities.development.DevWorkspaceTools
@@ -55,6 +62,7 @@ import ai.oneflow.execution.flowcode.FlowCodeTools
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -90,6 +98,11 @@ data class OneflowUiState(
     val searchHits: List<SearchHit> = emptyList(),
     val researchReportMarkdown: String? = null,
     val researchStatus: String = "Keyless Wikipedia search + SSRF-safe fetcher ready.",
+    val accessibilityEnabled: Boolean = false,
+    val emergencyStopped: Boolean = false,
+    val shizukuStatus: ShizukuBridgeStatus = ShizukuBridgeStatus(),
+    val mediaProjectionState: MediaProjectionState = MediaProjectionState(),
+    val lastUiSnapshotSummary: String? = null,
     val activeMission: MissionStateSnapshot? = null,
     val activeEvents: List<MissionEventEnvelope> = emptyList(),
     val activeReceipt: MissionReceipt? = null,
@@ -137,6 +150,15 @@ class OneflowSessionController(context: Context) {
     private val researchLedger = ResearchLedger()
     private val webTools = FlowWebTools(searchRouter, webFetcher, researchLedger).also {
         it.registerAll(toolBroker)
+    }
+    val flowAccessRouter = FlowAccessRouter(OneflowAccessibilityService.backend)
+    private val computerUseTools = ComputerUseTools(flowAccessRouter).also {
+        it.registerAll(toolBroker)
+    }
+    val mediaProjectionManager = MediaProjectionConsentManager(appContext, flowAccessRouter)
+    private val shizukuBridge = ShizukuBridge(appContext) { st ->
+        flowAccessRouter.updateShizukuStatus(st)
+        _uiState.update { it.copy(shizukuStatus = st) }
     }
 
     private val isolatedQuickJsEngine = AndroidIsolatedQuickJsEngine(
@@ -663,8 +685,67 @@ class OneflowSessionController(context: Context) {
         )
     }
 
+    fun refreshComputerUseStatus() {
+        val sh = shizukuBridge.refreshStatus()
+        _uiState.update {
+            it.copy(
+                accessibilityEnabled = OneflowAccessibilityService.isConnected(),
+                emergencyStopped = flowAccessRouter.isEmergencyStopped(),
+                shizukuStatus = sh,
+                mediaProjectionState = flowAccessRouter.getMediaProjectionState()
+            )
+        }
+    }
+
+    fun triggerEmergencyStop() {
+        flowAccessRouter.triggerEmergencyStop("User tapped Emergency Stop")
+        mediaProjectionManager.stopAndRevoke()
+        _uiState.update {
+            it.copy(
+                emergencyStopped = true,
+                mediaProjectionState = flowAccessRouter.getMediaProjectionState(),
+                statusBanner = "EMERGENCY STOP ACTIVE: Device actuation halted & screen capture revoked."
+            )
+        }
+    }
+
+    fun clearEmergencyStop() {
+        flowAccessRouter.clearEmergencyStop()
+        _uiState.update {
+            it.copy(
+                emergencyStopped = false,
+                statusBanner = "Emergency stop cleared."
+            )
+        }
+    }
+
+    fun requestShizukuPermissionOrBind() {
+        shizukuBridge.requestPermissionOrBind()
+        refreshComputerUseStatus()
+    }
+
+    fun captureActiveUiTreePreview() {
+        scope.launch {
+            val res = withContext(Dispatchers.IO) { flowAccessRouter.captureSnapshot() }
+            val summary = res.fold(
+                onSuccess = { s ->
+                    "Epoch #${s.epoch} pkg=${s.packageName} nodes=${s.nodes.size} redacted=${s.redactedCount}"
+                },
+                onFailure = { e -> "Capture unavailable: ${e.message}" }
+            )
+            _uiState.update {
+                it.copy(
+                    accessibilityEnabled = OneflowAccessibilityService.isConnected(),
+                    lastUiSnapshotSummary = summary
+                )
+            }
+        }
+    }
+
     fun dispose() {
         activeJob?.cancel()
+        shizukuBridge.unbind()
+        mediaProjectionManager.stopAndRevoke()
         fixtureServer.stop()
     }
 }

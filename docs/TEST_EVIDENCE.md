@@ -92,6 +92,20 @@
 
 ---
 
+## Phase 6 — Android Computer Use (`v0.5`, 2026-11-26)
+
+### TEST-601: FlowAccessRouter, Redaction, Stale Refs, Emergency Stop, Shizuku & MediaProjection
+- **Commands:**
+  - `grep -rn "import android\." core/ execution/ capabilities/ platform/` -> `PURE_CORE_OK` (0 matches)
+  - `adev './gradlew :core:contracts:test :core:kernel:test :core:models:test :core:intelligence:test :execution:broker:test :execution:flowcode:test :capabilities:files:test :platform:runtime:test :capabilities:development:test :capabilities:research:test :capabilities:computer-use:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain'`
+  - `rish -c "pm install -r -S ..."` + `rish -c 'am force-stop ai.oneflow.app && am start -W -n ai.oneflow.app/.MainActivity'`
+- **Observed Result (exit 0, `BUILD SUCCESSFUL in 2m 59s`):**
+  - `39/39` tests passing (`0` failures, `0` errors, `0` skipped across 14 suites), including `Phase6ComputerUseTest` (4 tests: password/protected-package redaction & actuation denial, stale epoch ref rejection, emergency stop kill-switch + MediaProjection revocation, and `SafeToolBroker` `device.actuate` grant enforcement).
+  - `:app:lintDebug` passed (`0` errors); `:app:assembleDebug` built `app-debug.apk`.
+  - Shizuku `rish` device install `Success`, cold-launch `Status: ok`, `LaunchState: COLD`, `TotalTime: 1260`.
+
+---
+
 ## Phase 5 — FlowWeb, FlowBrowser & Research (`v0.4`, 2026-11-26)
 
 ### TEST-501: FlowWeb SSRF Guard, SearchRouter, WebFetcher, ResearchLedger, BrowserSnapshot & Device Install
