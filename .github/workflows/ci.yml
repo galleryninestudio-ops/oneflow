@@ -1,0 +1,57 @@
+name: Oneflow Host & Android CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  host-jvm-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enforce pure core module isolation (no android imports)
+        run: |
+          if grep -rn "import android\." core/ execution/; then
+            echo "ERROR: Android imports found in pure core/execution modules"
+            exit 1
+          fi
+      - name: Run pure JVM unit & contract tests
+        run: ./gradlew :core:contracts:test :core:kernel:test :core:models:test :execution:broker:test --console=plain
+
+  native-pocs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native C build tools
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build clang
+      - name: Fetch pinned QuickJS-NG v0.18.0
+        run: bash scripts/fetch-quickjs-ng.sh
+      - name: Build & run QuickJS-NG host POC
+        run: |
+          cmake -S experiments/quickjs-poc -B experiments/quickjs-poc/build -G Ninja -DCMAKE_C_COMPILER=clang
+          cmake --build experiments/quickjs-poc/build
+          ./experiments/quickjs-poc/build/qjs_poc
+      - name: Build & run isolated worker host POC
+        run: |
+          clang -Wall -Wextra -O2 experiments/isolated-worker-poc/worker_poc.c -o experiments/isolated-worker-poc/worker_poc
+          ./experiments/isolated-worker-poc/worker_poc
+
+  android-debug-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Run Android unit tests, lint, and assembleDebug
+        run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain

@@ -9,9 +9,15 @@ local.properties
 .idea/
 .DS_Store
 
+# Pinned third-party checkouts (fetched via scripts/)
+third_party/
+
 # Native build artifacts
 experiments/**/build/
+experiments/**/build-android/
 experiments/**/bin/
+experiments/isolated-worker-poc/worker_poc
+experiments/native-exec-poc/abi_probe_bionic
 *.o
 *.a
 *.so

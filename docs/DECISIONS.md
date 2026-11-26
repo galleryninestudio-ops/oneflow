@@ -15,8 +15,8 @@
   - Gradle: `9.9.2` (official release)
   - AGP: `9.5.3` (Google Maven latest stable; AGP 9 has built-in Kotlin compilation)
   - Kotlin: `2.4.21` (Maven Central latest stable, aligned with `adev-new` tested baseline)
-  - `compileSdk`: `37`, `targetSdk`: `37`, `minSdk`: `26`
-  - Compose BOM: `2026.09.00` (verified baseline for `compileSdk = 37`, or `2026.11.01`)
+  - `compileSdk`: `37` (`android-37.0`), `targetSdk`: `37`, `minSdk`: `26`
+  - Compose BOM: `2026.09.00` (verified against `android-37.0`; testing `2026.11.01` failed `checkDebugAarMetadata` because Compose `1.13.0` requires `android-37.1`)
   - Coroutines: `1.11.0`, `kotlinx-serialization-json`: `1.13.0`, OkHttp (+ `mockwebserver3`): `5.5.1`
   - JUnit 5 / Jupiter: `6.1.3` (or `junit-jupiter` 5.x/6.x verified on Gradle 9.9.2)
   - AndroidX WebKit: `1.18.0`, Shizuku API: `13.1.5` (deferred to gated capability probe)
