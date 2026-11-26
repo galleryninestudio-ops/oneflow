@@ -1,0 +1,28 @@
+# Gradle & IDE
+.gradle/
+.kotlin/
+build/
+**/build/
+**/.cxx/
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Native build artifacts
+experiments/**/build/
+experiments/**/bin/
+*.o
+*.a
+*.so
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Secrets & local test dumps (never commit)
+.env
+*.secret
+secrets.properties
+logs/*.log
+tmp/
