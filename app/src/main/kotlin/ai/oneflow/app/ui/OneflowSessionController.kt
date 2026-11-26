@@ -14,6 +14,13 @@ import ai.oneflow.capabilities.files.ArtifactStore
 import ai.oneflow.capabilities.files.TransactionJournal
 import ai.oneflow.capabilities.files.WorkspaceFileTools
 import ai.oneflow.capabilities.files.WorkspacePathGuard
+import ai.oneflow.capabilities.research.FlowWebTools
+import ai.oneflow.capabilities.research.ResearchLedger
+import ai.oneflow.capabilities.research.SearchHit
+import ai.oneflow.capabilities.research.SearchRouter
+import ai.oneflow.capabilities.research.SsrfPolicyValidator
+import ai.oneflow.capabilities.research.WebFetcher
+import ai.oneflow.capabilities.research.WikipediaOpenSearchAdapter
 import ai.oneflow.platform.runtime.FlowEnvironmentDetector
 import ai.oneflow.platform.runtime.WorkspaceEnvironmentManifest
 import ai.oneflow.core.contracts.AcceptanceCheckResult
@@ -80,6 +87,9 @@ data class OneflowUiState(
     val selectedEditorContent: String = "",
     val environmentManifest: WorkspaceEnvironmentManifest? = null,
     val devKits: List<DevKitStatus> = emptyList(),
+    val searchHits: List<SearchHit> = emptyList(),
+    val researchReportMarkdown: String? = null,
+    val researchStatus: String = "Keyless Wikipedia search + SSRF-safe fetcher ready.",
     val activeMission: MissionStateSnapshot? = null,
     val activeEvents: List<MissionEventEnvelope> = emptyList(),
     val activeReceipt: MissionReceipt? = null,
@@ -117,6 +127,15 @@ class OneflowSessionController(context: Context) {
         it.registerAll(toolBroker)
     }
     private val devTools = DevWorkspaceTools(workspacePathGuard).also {
+        it.registerAll(toolBroker)
+    }
+    private val ssrfValidator = SsrfPolicyValidator()
+    private val webFetcher = WebFetcher(ssrfValidator)
+    private val searchRouter = SearchRouter(
+        listOf(WikipediaOpenSearchAdapter(validator = ssrfValidator))
+    )
+    private val researchLedger = ResearchLedger()
+    private val webTools = FlowWebTools(searchRouter, webFetcher, researchLedger).also {
         it.registerAll(toolBroker)
     }
 
@@ -499,6 +518,48 @@ class OneflowSessionController(context: Context) {
             }.onFailure { err ->
                 _uiState.update { it.copy(statusBanner = "Save failed: ${err.message}") }
             }
+        }
+    }
+
+    fun runWebSearch(query: String) {
+        val q = query.trim()
+        if (q.isBlank()) return
+        scope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(researchStatus = "Searching keyless sources...") }
+            val resp = searchRouter.search(q, limit = 6)
+            val errSummary = if (resp.sourceErrors.isEmpty()) "OK" else resp.sourceErrors.entries.joinToString { "${it.key}: ${it.value}" }
+            _uiState.update {
+                it.copy(
+                    searchHits = resp.hits,
+                    researchStatus = "Found ${resp.hits.size} hits ($errSummary)"
+                )
+            }
+        }
+    }
+
+    fun fetchAndCiteUrl(url: String) {
+        scope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(researchStatus = "Fetching $url (SSRF-checked)...") }
+            val res = webFetcher.fetch(url)
+            res.fold(
+                onSuccess = { doc ->
+                    if (doc.challengeDetected != null) {
+                        _uiState.update { it.copy(researchStatus = "Manual takeover required: ${doc.challengeDetected}") }
+                    } else {
+                        researchLedger.record(doc, doc.textContent.take(300))
+                        val md = researchLedger.exportMarkdownReport("Oneflow Research", "Extracted & verified citations")
+                        _uiState.update {
+                            it.copy(
+                                researchReportMarkdown = md,
+                                researchStatus = "Cited '${doc.title}' (${doc.sourceId})"
+                            )
+                        }
+                    }
+                },
+                onFailure = { err ->
+                    _uiState.update { it.copy(researchStatus = "Blocked/failed: ${err.message}") }
+                }
+            )
         }
     }
 

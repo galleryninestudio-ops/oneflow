@@ -7,10 +7,16 @@ import ai.oneflow.app.theme.OneflowTheme
 import ai.oneflow.app.ui.OneflowSessionController
 import ai.oneflow.app.ui.OneflowUiState
 import ai.oneflow.app.ui.RestrictedWorkspacePreviewCard
+import ai.oneflow.capabilities.research.SsrfPolicyValidator
+import ai.oneflow.capabilities.research.UrlPolicyCheck
 import ai.oneflow.core.contracts.ChatRole
 import ai.oneflow.core.contracts.MissionState
 import ai.oneflow.core.contracts.ProviderPresets
 import android.os.Bundle
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.webkit.WebViewFeature
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -50,10 +56,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     private lateinit var controller: OneflowSessionController
@@ -81,7 +92,7 @@ private fun OneflowRootScreen(
     state: OneflowUiState,
     controller: OneflowSessionController
 ) {
-    var selectedTab by remember { mutableIntStateOf(if (state.providerState.onboardingCompleted) 0 else 3) }
+    var selectedTab by remember { mutableIntStateOf(if (state.providerState.onboardingCompleted) 0 else 4) }
 
     Scaffold(
         containerColor = OneflowColors.Background,
@@ -111,6 +122,12 @@ private fun OneflowRootScreen(
                 NavigationBarItem(
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
+                    icon = { Text("Web") },
+                    label = { Text("Research") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 4,
+                    onClick = { selectedTab = 4 },
                     icon = { Text("Setup") },
                     label = { Text("Setup") }
                 )
@@ -124,9 +141,10 @@ private fun OneflowRootScreen(
                 .fillMaxSize()
         ) {
             when (selectedTab) {
-                0 -> ChatTab(state = state, controller = controller, onGoSetup = { selectedTab = 3 })
+                0 -> ChatTab(state = state, controller = controller, onGoSetup = { selectedTab = 4 })
                 1 -> MissionsTab(state = state, controller = controller, onOpenChat = { selectedTab = 0 })
                 2 -> WorkspaceTab(state = state, controller = controller)
+                3 -> ResearchTab(state = state, controller = controller)
                 else -> SetupTab(state = state, controller = controller)
             }
         }
@@ -746,5 +764,217 @@ private fun SetupTab(
         }
 
         A2UiSubsetView(result = sampleA2Ui)
+    }
+}
+
+@Composable
+private fun ResearchTab(
+    state: OneflowUiState,
+    controller: OneflowSessionController
+) {
+    val queryState = rememberTextFieldState("")
+    val urlState = rememberTextFieldState("https://en.wikipedia.org/wiki/Android_(operating_system)")
+    val ssrfValidator = remember { SsrfPolicyValidator() }
+    val uiScope = rememberCoroutineScope()
+    var browserSpaceOpen by remember { mutableStateOf(false) }
+    var manualTakeover by remember { mutableStateOf(false) }
+    var activeBrowserUrl by remember { mutableStateOf<String?>(null) }
+    var browserSecurityNote by remember { mutableStateOf("Browser Space idle") }
+    val multiProfileSupported = remember {
+        runCatching { WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE) }.getOrDefault(false)
+    }
+
+    fun openGuardedBrowserUrl(candidate: String) {
+        uiScope.launch {
+            val check = withContext(Dispatchers.IO) { ssrfValidator.validate(candidate) }
+            when (check) {
+                is UrlPolicyCheck.Allowed -> {
+                    activeBrowserUrl = check.uri.toString()
+                    browserSpaceOpen = true
+                    browserSecurityNote = "Loaded ${check.uri}"
+                }
+                is UrlPolicyCheck.Blocked -> {
+                    browserSecurityNote = "Blocked by SSRF policy: ${check.reason}"
+                }
+            }
+        }
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(14.dp)
+    ) {
+        Text("FlowWeb & Browser Space", style = MaterialTheme.typography.titleMedium, color = OneflowColors.TextPrimary)
+        Text(
+            text = "SSRF-guarded search, fetch, citation ledger, and isolated WebView Space. MULTI_PROFILE=${if (multiProfileSupported) "SUPPORTED" else "LEGACY_FALLBACK"}",
+            style = MaterialTheme.typography.bodySmall,
+            color = OneflowColors.TextSecondary
+        )
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = OneflowColors.Surface),
+            border = BorderStroke(1.dp, OneflowColors.Border),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(14.dp)) {
+                Text("Web Search (Wikipedia OpenSearch)", style = MaterialTheme.typography.titleSmall, color = OneflowColors.TextPrimary)
+                OutlinedTextField(
+                    state = queryState,
+                    label = { Text("Search query") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(
+                    onClick = { controller.runWebSearch(queryState.text.toString()) },
+                    colors = ButtonDefaults.buttonColors(containerColor = OneflowColors.TextPrimary, contentColor = OneflowColors.Background)
+                ) {
+                    Text("Search Web")
+                }
+                Text("Status: ${state.researchStatus}", style = MaterialTheme.typography.bodySmall, color = OneflowColors.TextSecondary)
+            }
+        }
+
+        if (state.searchHits.isNotEmpty()) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = OneflowColors.Surface),
+                border = BorderStroke(1.dp, OneflowColors.Border),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(14.dp)) {
+                    Text("Search Results (${state.searchHits.size})", style = MaterialTheme.typography.titleSmall, color = OneflowColors.TextPrimary)
+                    for (hit in state.searchHits) {
+                        Surface(
+                            color = OneflowColors.SurfaceElevated,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(10.dp)) {
+                                Text(hit.title, style = MaterialTheme.typography.bodyMedium, color = OneflowColors.TextPrimary)
+                                Text(hit.canonicalUrl, style = MaterialTheme.typography.labelSmall, color = OneflowColors.TextSecondary)
+                                if (hit.snippet.isNotBlank()) {
+                                    Text(hit.snippet, style = MaterialTheme.typography.bodySmall, color = OneflowColors.TextSecondary)
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = { controller.fetchAndCiteUrl(hit.canonicalUrl) }) {
+                                        Text("Fetch & Cite")
+                                    }
+                                    OutlinedButton(onClick = {
+                                        openGuardedBrowserUrl(hit.canonicalUrl)
+                                    }) {
+                                        Text("Open Space")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = OneflowColors.Surface),
+            border = BorderStroke(1.dp, OneflowColors.Border),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(14.dp)) {
+                Text("Direct URL Fetch / Browser Space", style = MaterialTheme.typography.titleSmall, color = OneflowColors.TextPrimary)
+                OutlinedTextField(
+                    state = urlState,
+                    label = { Text("HTTPS URL") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    Button(
+                        onClick = { controller.fetchAndCiteUrl(urlState.text.toString()) },
+                        colors = ButtonDefaults.buttonColors(containerColor = OneflowColors.TextPrimary, contentColor = OneflowColors.Background)
+                    ) {
+                        Text("Fetch & Cite")
+                    }
+                    OutlinedButton(onClick = {
+                        openGuardedBrowserUrl(urlState.text.toString().trim())
+                    }) {
+                        Text(if (browserSpaceOpen) "Reload Space" else "Open Browser Space")
+                    }
+                    OutlinedButton(onClick = {
+                        manualTakeover = !manualTakeover
+                        browserSecurityNote = if (manualTakeover) "Manual takeover active (automation paused)" else "Automation resumed"
+                    }) {
+                        Text(if (manualTakeover) "Resume Auto" else "Manual Takeover")
+                    }
+                    if (browserSpaceOpen) {
+                        OutlinedButton(onClick = { browserSpaceOpen = false }) {
+                            Text("Close Space")
+                        }
+                    }
+                }
+                Text(browserSecurityNote, style = MaterialTheme.typography.bodySmall, color = OneflowColors.TextSecondary)
+            }
+        }
+
+        if (browserSpaceOpen && activeBrowserUrl != null) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = OneflowColors.Surface),
+                border = BorderStroke(1.dp, if (manualTakeover) OneflowColors.Warning else OneflowColors.Border),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(10.dp)) {
+                    Text(
+                        text = if (manualTakeover) "Browser Space [MANUAL TAKEOVER]" else "Browser Space [READ-ONLY SANDBOX]",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (manualTakeover) OneflowColors.Warning else OneflowColors.TextSecondary
+                    )
+                    AndroidView(
+                        factory = { ctx ->
+                            WebView(ctx).apply {
+                                settings.javaScriptEnabled = false
+                                settings.allowFileAccess = false
+                                settings.allowContentAccess = false
+                                settings.domStorageEnabled = false
+                                webViewClient = object : WebViewClient() {
+                                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                                        val targetUrl = request?.url?.toString().orEmpty()
+                                        val scheme = request?.url?.scheme?.lowercase()
+                                        if (scheme != "https" && scheme != "http") {
+                                            browserSecurityNote = "Navigation blocked: unsupported scheme '$scheme'"
+                                            return true
+                                        }
+                                        return false
+                                    }
+                                }
+                            }
+                        },
+                        update = { webView ->
+                            val target = activeBrowserUrl ?: return@AndroidView
+                            if (webView.url != target && (target.startsWith("https://") || target.startsWith("http://"))) {
+                                webView.loadUrl(target)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(340.dp)
+                    )
+                }
+            }
+        }
+
+        state.researchReportMarkdown?.let { report ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = OneflowColors.Surface),
+                border = BorderStroke(1.dp, OneflowColors.Border),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(14.dp)) {
+                    Text("Research Ledger Report", style = MaterialTheme.typography.titleSmall, color = OneflowColors.TextPrimary)
+                    Text(report, style = MaterialTheme.typography.bodySmall, color = OneflowColors.TextSecondary)
+                }
+            }
+        }
     }
 }

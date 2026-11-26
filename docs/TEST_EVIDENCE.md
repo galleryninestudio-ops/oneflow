@@ -92,6 +92,20 @@
 
 ---
 
+## Phase 5 — FlowWeb, FlowBrowser & Research (`v0.4`, 2026-11-26)
+
+### TEST-501: FlowWeb SSRF Guard, SearchRouter, WebFetcher, ResearchLedger, BrowserSnapshot & Device Install
+- **Commands:**
+  - `grep -rn "import android\." core/ execution/ capabilities/ platform/` -> `PURE_CORE_OK` (0 matches)
+  - `adev './gradlew :core:contracts:test :core:kernel:test :core:models:test :core:intelligence:test :execution:broker:test :execution:flowcode:test :capabilities:files:test :platform:runtime:test :capabilities:development:test :capabilities:research:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain'`
+  - `rish -c "pm install -r -S ..."` + `rish -c 'am force-stop ai.oneflow.app && am start -W -n ai.oneflow.app/.MainActivity'`
+- **Observed Result (exit 0, `BUILD SUCCESSFUL in 3m`):**
+  - `35/35` tests passing (`0` failures, `0` errors, `0` skipped across 13 suites), including `Phase5ResearchTest` (3 tests: `SsrfPolicyValidator` blocking `file://`, `127.0.0.1`, `169.254.169.254`, and `10.x` RFC1918; `SourceCircuitBreaker` + `SearchRouter` deduplication; `WebFetcher` + `ResearchLedger` grounded citation Markdown and `BrowserRefRegistry` snapshot bounds).
+  - `:app:lintDebug` passed (`0` errors); `:app:assembleDebug` built `app-debug.apk`.
+  - Shizuku `rish` device install `Success`, cold-launch `Status: ok`, `WaitTime: 482`.
+
+---
+
 ## Phase 4 — Native Development Environment (`v0.3`, 2026-11-26)
 
 ### TEST-401: FlowRuntime, FlowPkg ECDSA Verification/Rollback, Python Fixture Build/Test, Lint & APK

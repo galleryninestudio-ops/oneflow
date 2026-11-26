@@ -12,6 +12,7 @@
 | Kotlin Coroutines | `https://github.com/Kotlin/kotlinx.coroutines` | `1.11.0` (`8564f65764d3`) | Apache-2.0 | Structured concurrency |
 | Kotlin Serialization | `https://github.com/Kotlin/kotlinx.serialization` | `1.13.0` (`0cd830bb43a2`) | Apache-2.0 | JSON & schema serialization |
 | OkHttp + MockWebServer | `https://github.com/square/okhttp` | `5.5.1` (`be5151ac3b63`) | Apache-2.0 | HTTP/TLS client, SSE streaming, mock HTTP server |
+| jsoup | `https://github.com/jhy/jsoup` (`org.jsoup:jsoup`) | `1.24.1` | MIT | HTML parsing and content extraction |
 | Jetpack Compose BOM | `androidx.compose:compose-bom` | `2026.09.00` (pinned for `compileSdk = 37` / `android-37.0`; `2026.11.01` requires `android-37.1`) | Apache-2.0 | Native Android UI |
 | AndroidX Core / Activity / Lifecycle / Navigation | `androidx.core:core-ktx`, `activity-compose`, `lifecycle-runtime-ktx`, `navigation-compose` | `1.19.1`, `1.13.0`, `2.11.0`, `2.10.2` | Apache-2.0 | Android platform & navigation |
 | JUnit 5 (Jupiter) | `org.junit.jupiter:junit-jupiter` | `6.1.3` (verify JVM test runner on Gradle 9.9.2) | EPL-2.0 | Host unit & contract tests |

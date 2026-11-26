@@ -49,6 +49,7 @@ dependencies {
     implementation(project(":execution:flowcode"))
     implementation(project(":capabilities:files"))
     implementation(project(":capabilities:development"))
+    implementation(project(":capabilities:research"))
     implementation(project(":platform:runtime"))
 
     implementation(libs.androidx.core.ktx)
