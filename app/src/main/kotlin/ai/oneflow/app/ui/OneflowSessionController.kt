@@ -6,6 +6,11 @@ import ai.oneflow.app.data.ProviderStoreState
 import ai.oneflow.app.probe.CapabilityProbe
 import ai.oneflow.app.probe.Phase0Diagnostics
 import ai.oneflow.app.vault.AndroidKeystoreVault
+import ai.oneflow.app.worker.AndroidIsolatedQuickJsEngine
+import ai.oneflow.capabilities.files.ArtifactStore
+import ai.oneflow.capabilities.files.TransactionJournal
+import ai.oneflow.capabilities.files.WorkspaceFileTools
+import ai.oneflow.capabilities.files.WorkspacePathGuard
 import ai.oneflow.core.contracts.AcceptanceCheckResult
 import ai.oneflow.core.contracts.MissionEventEnvelope
 import ai.oneflow.core.contracts.MissionId
@@ -30,6 +35,7 @@ import ai.oneflow.core.models.OpenAiCompatibleProvider
 import ai.oneflow.execution.broker.DefaultToolRegistry
 import ai.oneflow.execution.broker.Phase1FixtureTools
 import ai.oneflow.execution.broker.SafeToolBroker
+import ai.oneflow.execution.flowcode.FlowCodeTools
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +47,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
+import java.nio.file.Files
 
 data class ToolTraceCard(
     val callId: String,
@@ -55,6 +62,10 @@ data class OneflowUiState(
     val discoveredModels: List<String> = emptyList(),
     val providerStatusMessage: String = "Configure an OpenAI-compatible API key & endpoint, or enable the labeled local test fixture.",
     val isTestingProvider: Boolean = false,
+    val workspaceReadGranted: Boolean = false,
+    val workspaceWriteGranted: Boolean = false,
+    val previewEntryPath: String? = null,
+    val showPreview: Boolean = false,
     val activeMission: MissionStateSnapshot? = null,
     val activeEvents: List<MissionEventEnvelope> = emptyList(),
     val allMissions: List<MissionStateSnapshot> = emptyList(),
@@ -74,11 +85,48 @@ class OneflowSessionController(context: Context) {
         storageFile = File(appContext.filesDir, "oneflow/providers.json"),
         vault = vault
     )
+    private val workspaceDir = File(appContext.filesDir, "oneflow/workspaces/default").apply { mkdirs() }
+    val workspacePathGuard = WorkspacePathGuard(workspaceDir.toPath())
+    private val artifactStore = ArtifactStore(File(workspaceDir, ".oneflow/artifacts").toPath())
+    private val transactionJournal = TransactionJournal(File(workspaceDir, ".oneflow/journal").toPath(), workspacePathGuard)
+
     private val missionStore = FileMissionStore(File(appContext.filesDir, "oneflow/missions").toPath())
     private val missionController = MissionController(missionStore)
     private val toolRegistry = DefaultToolRegistry()
     private val toolBroker = SafeToolBroker(toolRegistry)
     private val fixtureTools: List<ModelToolSpec> = Phase1FixtureTools.registerAll(toolBroker)
+    private val workspaceTools = WorkspaceFileTools(workspacePathGuard, artifactStore, transactionJournal).also {
+        it.registerAll(toolBroker)
+    }
+
+    private val isolatedQuickJsEngine = AndroidIsolatedQuickJsEngine(
+        context = appContext,
+        toolRegistry = toolRegistry,
+        toolBroker = toolBroker,
+        activeToolIds = {
+            listOf("fs.list", "fs.glob", "fs.read", "fs.write", "fs.patch", "fs.grep", "verify.file", "artifact.create", "artifact.read")
+        },
+        missionGrantsProvider = { missionId ->
+            kotlinx.coroutines.runBlocking {
+                missionStore.load(missionId)?.allowedCapabilities ?: emptySet()
+            }
+        },
+        sessionApprovalsProvider = { missionId ->
+            kotlinx.coroutines.runBlocking {
+                missionStore.load(missionId)?.approvedTools ?: emptySet()
+            }
+        },
+        knownSecrets = { vault.knownSecrets() }
+    )
+
+    private val flowCodeMetaTools: List<ModelToolSpec> = FlowCodeTools.registerMetaTools(
+        broker = toolBroker,
+        registry = toolRegistry,
+        scriptEngine = isolatedQuickJsEngine,
+        missionStore = missionStore
+    )
+    private val activeModelTools: List<ModelToolSpec> = flowCodeMetaTools + fixtureTools
+
     private val fixtureServer = LocalFixtureServer()
 
     private val verifier = object : Verifier {
@@ -88,7 +136,7 @@ class OneflowSessionController(context: Context) {
                 VerificationResult(
                     status = VerificationStatus.PASS,
                     checks = listOf(AcceptanceCheckResult("response_non_empty", true, null, "Assistant produced final response")),
-                    summary = "Phase 1 deterministic verification passed"
+                    summary = "Deterministic verification passed"
                 )
             } else {
                 VerificationResult(
@@ -103,7 +151,8 @@ class OneflowSessionController(context: Context) {
     private val _uiState = MutableStateFlow(
         OneflowUiState(
             diagnostics = CapabilityProbe.inspect(appContext),
-            providerState = providerRepo.load()
+            providerState = providerRepo.load(),
+            previewEntryPath = if (Files.exists(workspaceDir.toPath().resolve("index.html"))) "index.html" else null
         )
     )
     val uiState: StateFlow<OneflowUiState> = _uiState.asStateFlow()
@@ -132,6 +181,14 @@ class OneflowSessionController(context: Context) {
                 }
             }
         }
+    }
+
+    fun setWorkspacePermissions(read: Boolean, write: Boolean) {
+        _uiState.update { it.copy(workspaceReadGranted = read, workspaceWriteGranted = write) }
+    }
+
+    fun setShowPreview(show: Boolean) {
+        _uiState.update { it.copy(showPreview = show) }
     }
 
     fun hasStoredKey(alias: String): Boolean = providerRepo.hasStoredKey(alias)
@@ -250,10 +307,17 @@ class OneflowSessionController(context: Context) {
                 )
             }
 
+            val grants = buildSet {
+                add("fixture.read")
+                add("fixture.write")
+                if (_uiState.value.workspaceReadGranted) add("workspace.read")
+                if (_uiState.value.workspaceWriteGranted) add("workspace.write")
+            }
+
             val created = missionController.createMission(
                 workspaceId = WorkspaceId("default-workspace"),
                 objective = text,
-                allowedCapabilities = setOf("fixture.read", "fixture.write")
+                allowedCapabilities = grants
             )
             val runner = createRunner(profile.config)
             val withMsg = (runner.appendUserMessage(created.id, created.stateRevision, text) as KernelResult.Ok).value
@@ -321,7 +385,7 @@ class OneflowSessionController(context: Context) {
             val res = runner.runMission(
                 missionId = missionId,
                 modelId = modelId,
-                tools = fixtureTools
+                tools = activeModelTools
             ) { update ->
                 when (update) {
                     is MissionRunnerUpdate.StateChanged -> {
@@ -367,7 +431,13 @@ class OneflowSessionController(context: Context) {
             }
         } finally {
             refreshMissions()
-            _uiState.update { it.copy(isRunningMission = false) }
+            val hasHtml = Files.exists(workspaceDir.toPath().resolve("index.html"))
+            _uiState.update {
+                it.copy(
+                    isRunningMission = false,
+                    previewEntryPath = if (hasHtml) "index.html" else null
+                )
+            }
         }
     }
 

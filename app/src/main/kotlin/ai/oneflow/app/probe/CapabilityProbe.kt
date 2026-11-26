@@ -24,7 +24,7 @@ data class Phase0Diagnostics(
 
 object CapabilityProbe {
     fun inspect(context: Context): Phase0Diagnostics {
-        val flags = FeatureFlags()
+        val flags = FeatureFlags(flowcodeQuickJsEnabled = true)
         val webViewPkg = runCatching { WebViewCompat.getCurrentWebViewPackage(context) }.getOrNull()
         val multiProfile = runCatching {
             WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)

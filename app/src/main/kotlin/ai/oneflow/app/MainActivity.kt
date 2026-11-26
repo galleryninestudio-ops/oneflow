@@ -6,6 +6,7 @@ import ai.oneflow.app.theme.OneflowColors
 import ai.oneflow.app.theme.OneflowTheme
 import ai.oneflow.app.ui.OneflowSessionController
 import ai.oneflow.app.ui.OneflowUiState
+import ai.oneflow.app.ui.RestrictedWorkspacePreviewCard
 import ai.oneflow.core.contracts.ChatRole
 import ai.oneflow.core.contracts.MissionState
 import ai.oneflow.core.contracts.ProviderPresets
@@ -155,6 +156,30 @@ private fun ChatTab(
             }
             if (activeProfile == null) {
                 TextButton(onClick = onGoSetup) { Text("Configure API") }
+            }
+        }
+
+        state.previewEntryPath?.let { entry ->
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Workspace artifact: $entry",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OneflowColors.Success
+                )
+                OutlinedButton(onClick = { controller.setShowPreview(!state.showPreview) }) {
+                    Text(if (state.showPreview) "Hide Preview" else "Open Preview")
+                }
+            }
+            if (state.showPreview) {
+                RestrictedWorkspacePreviewCard(
+                    pathGuard = controller.workspacePathGuard,
+                    entryRelativePath = entry,
+                    onClose = { controller.setShowPreview(false) }
+                )
             }
         }
 
@@ -508,6 +533,34 @@ private fun SetupTab(
                 HorizontalDivider(color = OneflowColors.Border)
                 OutlinedButton(onClick = { controller.enableLocalTestFixture() }) {
                     Text("Use Local Test Fixture Server (No Real LLM)")
+                }
+            }
+        }
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = OneflowColors.Surface),
+            border = BorderStroke(1.dp, OneflowColors.Border),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(14.dp)) {
+                Text("Scoped Workspace Permissions", style = MaterialTheme.typography.titleSmall, color = OneflowColors.TextPrimary)
+                Text(
+                    "Default deny: FlowCode cannot read or write workspace files unless explicitly granted here.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OneflowColors.TextSecondary
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { controller.setWorkspacePermissions(read = !state.workspaceReadGranted, write = state.workspaceWriteGranted) }
+                    ) {
+                        Text(if (state.workspaceReadGranted) "Read: GRANTED" else "Read: DENIED")
+                    }
+                    OutlinedButton(
+                        onClick = { controller.setWorkspacePermissions(read = state.workspaceReadGranted, write = !state.workspaceWriteGranted) }
+                    ) {
+                        Text(if (state.workspaceWriteGranted) "Write: GRANTED" else "Write: DENIED")
+                    }
                 }
             }
         }

@@ -26,6 +26,12 @@
             android:name=".worker.IsolatedWorkerProbeService"
             android:exported="false"
             android:isolatedProcess="true" />
+
+        <!-- Phase 2 FlowCode QuickJS-NG Isolated Worker: executes model-generated JS under separate OS UID -->
+        <service
+            android:name=".worker.FlowCodeIsolatedWorkerService"
+            android:exported="false"
+            android:isolatedProcess="true" />
     </application>
 
 </manifest>

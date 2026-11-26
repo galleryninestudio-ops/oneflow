@@ -31,6 +31,13 @@ android {
     buildFeatures {
         compose = true
     }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
 }
 
 dependencies {
@@ -38,6 +45,8 @@ dependencies {
     implementation(project(":core:kernel"))
     implementation(project(":core:models"))
     implementation(project(":execution:broker"))
+    implementation(project(":execution:flowcode"))
+    implementation(project(":capabilities:files"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

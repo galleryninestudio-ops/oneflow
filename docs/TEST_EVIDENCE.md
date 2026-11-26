@@ -59,6 +59,25 @@
 - **Repository:** `https://github.com/galleryninestudio-ops/oneflow` (`PUBLIC`, branch `main`)
 - **Observed Result:** Push run `4579624...` (`feat(phase0): ...`) completed green (`✓`, 2m 32s).
 
+---
+
+## Phase 2 — FlowCode Secure Execution (`v0.1`, 2026-11-26)
+
+### TEST-201: Phase 2 Host, QuickJS-NG IPC, Security, NDK JNI, Lint & APK
+- **Environment:** `adev` Ubuntu 24.04 `aarch64`, OpenJDK `21.0.13.1`, Gradle `9.9.2`, AGP `9.5.3`, NDK `28.2.13676358`, `qjs_worker` (Clang `19.1.1`)
+- **Command:** `adev './gradlew :core:contracts:test :core:kernel:test :core:models:test :execution:broker:test :execution:flowcode:test :capabilities:files:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain'`
+- **Observed Result (exit 0, `BUILD SUCCESSFUL in 2m 6s`):**
+  - `25/25` unit & integration tests passing (`0` failures, `0` errors, `0` skipped), including:
+    - `WorkspaceFileToolsTest` (1 test): traversal `..` denied, symlink escape denied, `fs.write` + `fs.patch` `STALE_STATE` check, `verify.file`, `TransactionJournal.undo`.
+    - `FlowCodeEndToEndTest` (2 tests): responsive website gate (`discover` + batched `execute` completing in `3` model turns vs `5+` direct turns), denied-permission zero-mutation check, ambient global isolation (`require`/`std`/`os`/`fetch` undefined), path traversal denial, `try/catch` infinite-loop interrupt (`TIMEOUT`), memory cap (`2MB`), large output `ArtifactStore` truncation, and missing-worker containment.
+  - Android NDK `arm64-v8a` JNI `liboneflow_qjs.so` built cleanly via CMake `3.22.1`.
+  - Pure-core isolation: `grep -rn "import android\." core/ execution/ capabilities/` -> 0 matches.
+
+### DEV-201: Physical Device Install & Cold Launch via Shizuku (`rish`)
+- **Environment:** Physical Android 16 `aarch64` device via `rish` (`uid=2000(shell)`)
+- **Command:** `pm install -r` + `am start -W -n ai.oneflow.app/.MainActivity`
+- **Observed Result:** `Success`, `LaunchState: COLD`, `TotalTime: 932ms`, PID `12273`, clean `logcat` (no fatal/uncaught exceptions).
+
 ### ARCH-001: Pure Core Boundary Check
 - **Command:** `grep -rn "import android\." core/ execution/`
 - **Observed Result:** Zero matches (`PASS: zero android.* imports in core/ and execution/`).

@@ -24,7 +24,7 @@ jobs:
             exit 1
           fi
       - name: Run pure JVM unit & contract tests
-        run: ./gradlew :core:contracts:test :core:kernel:test :core:models:test :execution:broker:test --console=plain
+        run: ./gradlew :core:contracts:test :core:kernel:test :core:models:test :execution:broker:test :capabilities:files:test --console=plain
 
   native-pocs:
     runs-on: ubuntu-latest
@@ -34,15 +34,24 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y cmake ninja-build clang
       - name: Fetch pinned QuickJS-NG v0.18.0
         run: bash scripts/fetch-quickjs-ng.sh
-      - name: Build & run QuickJS-NG host POC
+      - name: Build & run QuickJS-NG host POC and qjs_worker
         run: |
           cmake -S experiments/quickjs-poc -B experiments/quickjs-poc/build -G Ninja -DCMAKE_C_COMPILER=clang
           cmake --build experiments/quickjs-poc/build
           ./experiments/quickjs-poc/build/qjs_poc
+          cmake -S native/qjs-worker -B native/qjs-worker/build -G Ninja -DCMAKE_C_COMPILER=clang
+          cmake --build native/qjs-worker/build
       - name: Build & run isolated worker host POC
         run: |
           clang -Wall -Wextra -O2 experiments/isolated-worker-poc/worker_poc.c -o experiments/isolated-worker-poc/worker_poc
           ./experiments/isolated-worker-poc/worker_poc
+      - name: Run FlowCode end-to-end tests with real qjs_worker
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :execution:flowcode:test --console=plain
 
   android-debug-build:
     runs-on: ubuntu-latest
@@ -53,5 +62,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
+      - name: Fetch pinned QuickJS-NG v0.18.0 for Android NDK JNI
+        run: bash scripts/fetch-quickjs-ng.sh
       - name: Run Android unit tests, lint, and assembleDebug
         run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain

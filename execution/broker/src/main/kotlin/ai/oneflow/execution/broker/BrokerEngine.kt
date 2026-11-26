@@ -28,6 +28,12 @@ fun interface ToolHandler {
     suspend fun execute(request: ToolRequest): JsonObject
 }
 
+class BrokerToolException(
+    val status: ToolResultStatus,
+    val errorCode: ErrorCode,
+    override val message: String
+) : RuntimeException(message)
+
 class DefaultToolRegistry : ToolRegistry {
     private val manifests = ConcurrentHashMap<String, ToolManifest>()
     private val latestByToolId = ConcurrentHashMap<String, ToolManifest>()
@@ -235,6 +241,17 @@ class SafeToolBroker(
                 error = FlowError(ErrorCode.TIMEOUT, "Tool '${manifest.id}' timed out after ${manifest.execution.timeoutMs}ms"),
                 durationMs = (clockEpochMs() - start).coerceAtLeast(0L),
                 retryDisposition = manifest.execution.retry
+            )
+        } catch (e: BrokerToolException) {
+            ToolResult(
+                requestId = request.requestId,
+                status = e.status,
+                error = FlowError(
+                    e.errorCode,
+                    SecretRedactor.redact(e.message)
+                ),
+                durationMs = (clockEpochMs() - start).coerceAtLeast(0L),
+                retryDisposition = RetryDisposition.NO_RETRY
             )
         } catch (e: Exception) {
             ToolResult(

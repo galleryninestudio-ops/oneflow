@@ -3,6 +3,8 @@ package ai.oneflow.app.data
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -98,10 +100,34 @@ class LocalFixtureServer(
 
         val sseChunks = if (lastRole == "tool") {
             val toolContent = lastMsg?.get("content")?.jsonPrimitive?.contentOrNull.orEmpty()
-            val escaped = Json.encodeToString(kotlinx.serialization.json.JsonPrimitive("[TEST FIXTURE] Broker returned: $toolContent"))
+            val toolMsgCount = messages.count { (it as? JsonObject)?.get("role")?.jsonPrimitive?.contentOrNull == "tool" }
+            if ((allUserText.contains("website") || allUserText.contains("html") || allUserText.contains("flowcode")) && toolMsgCount == 1) {
+                val jsCode = """
+                    const html = '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#000;color:#fff;font-family:sans-serif;padding:20px}.card{background:#141414;border:1px solid #303030;border-radius:12px;padding:16px}@media(max-width:600px){body{padding:12px}}</style></head><body><div class="card"><h1>Oneflow Preview</h1><p>Created via FlowCode QuickJS-NG isolated worker.</p></div></body></html>';
+                    const w = await flow.fs.write({ path: 'index.html', content: html });
+                    const v = await flow.verify.file({ path: 'index.html', must_contain: ['viewport', 'Oneflow Preview'] });
+                    return { w, v };
+                """.trimIndent()
+                val argsEscaped = Json.encodeToString(JsonPrimitive(buildJsonObject { put("code", JsonPrimitive(jsCode)) }.toString()))
+                listOf(
+                    """{"choices":[{"index":0,"delta":{"content":"[TEST FIXTURE] Executing FlowCode website script...\n"}}]}""",
+                    """{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_fix_exec_1","type":"function","function":{"name":"execute","arguments":$argsEscaped}}]}}]}""",
+                    """{"choices":[{"index":0,"finish_reason":"tool_calls","delta":{}}],"usage":{"prompt_tokens":20,"completion_tokens":24,"total_tokens":44}}""",
+                    "[DONE]"
+                )
+            } else {
+                val escaped = Json.encodeToString(JsonPrimitive("[TEST FIXTURE] Broker returned: $toolContent"))
+                listOf(
+                    """{"choices":[{"index":0,"delta":{"content":$escaped}}]}""",
+                    """{"choices":[{"index":0,"finish_reason":"stop","delta":{}}],"usage":{"prompt_tokens":24,"completion_tokens":14,"total_tokens":38}}""",
+                    "[DONE]"
+                )
+            }
+        } else if (allUserText.contains("website") || allUserText.contains("html") || allUserText.contains("flowcode")) {
             listOf(
-                """{"choices":[{"index":0,"delta":{"content":$escaped}}]}""",
-                """{"choices":[{"index":0,"finish_reason":"stop","delta":{}}],"usage":{"prompt_tokens":24,"completion_tokens":14,"total_tokens":38}}""",
+                """{"choices":[{"index":0,"delta":{"content":"[TEST FIXTURE] Discovering FlowCode workspace tools...\n"}}]}""",
+                """{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_fix_disc_1","type":"function","function":{"name":"discover","arguments":"{\"query\":\"fs verify\",\"limit\":10}"}}]}}]}""",
+                """{"choices":[{"index":0,"finish_reason":"tool_calls","delta":{}}],"usage":{"prompt_tokens":16,"completion_tokens":12,"total_tokens":28}}""",
                 "[DONE]"
             )
         } else if (allUserText.contains("approval") || allUserText.contains("publish")) {
