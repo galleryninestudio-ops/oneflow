@@ -25,6 +25,10 @@ import ai.oneflow.core.contracts.VerificationResult
 import ai.oneflow.core.contracts.VerificationStatus
 import ai.oneflow.core.contracts.Verifier
 import ai.oneflow.core.contracts.WorkspaceId
+import ai.oneflow.core.intelligence.FlowReplayEngine
+import ai.oneflow.core.intelligence.MissionReceipt
+import ai.oneflow.core.intelligence.MissionReceiptGenerator
+import ai.oneflow.core.intelligence.ReplayReport
 import ai.oneflow.core.kernel.FileMissionStore
 import ai.oneflow.core.kernel.FlowContextCompiler
 import ai.oneflow.core.kernel.KernelResult
@@ -68,6 +72,9 @@ data class OneflowUiState(
     val showPreview: Boolean = false,
     val activeMission: MissionStateSnapshot? = null,
     val activeEvents: List<MissionEventEnvelope> = emptyList(),
+    val activeReceipt: MissionReceipt? = null,
+    val replayReport: ReplayReport? = null,
+    val undoableTxIds: List<String> = emptyList(),
     val allMissions: List<MissionStateSnapshot> = emptyList(),
     val streamingBuffer: String = "",
     val toolTraceCards: List<ToolTraceCard> = emptyList(),
@@ -92,6 +99,7 @@ class OneflowSessionController(context: Context) {
 
     private val missionStore = FileMissionStore(File(appContext.filesDir, "oneflow/missions").toPath())
     private val missionController = MissionController(missionStore)
+    private val replayEngine = FlowReplayEngine(missionStore)
     private val toolRegistry = DefaultToolRegistry()
     private val toolBroker = SafeToolBroker(toolRegistry)
     private val fixtureTools: List<ModelToolSpec> = Phase1FixtureTools.registerAll(toolBroker)
@@ -380,6 +388,42 @@ class OneflowSessionController(context: Context) {
         _uiState.update { it.copy(isRunningMission = false, statusBanner = "Mission cancellation requested.") }
     }
 
+    fun replayMissionReadOnly(missionId: MissionId) {
+        scope.launch(Dispatchers.IO) {
+            val report = replayEngine.replayReadOnly(missionId)
+            _uiState.update { it.copy(replayReport = report) }
+        }
+    }
+
+    fun forkMission(missionId: MissionId) {
+        scope.launch(Dispatchers.IO) {
+            val forked = replayEngine.forkMission(missionId)
+            refreshMissions()
+            if (forked != null) {
+                _uiState.update {
+                    it.copy(
+                        activeMission = forked,
+                        statusBanner = "Forked mission ${forked.id.value} (independent grants)"
+                    )
+                }
+            }
+        }
+    }
+
+    fun undoTransaction(txId: String) {
+        scope.launch(Dispatchers.IO) {
+            val ok = transactionJournal.undo(txId)
+            refreshMissions()
+            val hasHtml = Files.exists(workspaceDir.toPath().resolve("index.html"))
+            _uiState.update {
+                it.copy(
+                    previewEntryPath = if (hasHtml) "index.html" else null,
+                    statusBanner = if (ok) "Undid local file transaction $txId" else "Could not undo $txId"
+                )
+            }
+        }
+    }
+
     private suspend fun runLoop(runner: MissionRunner, missionId: MissionId, modelId: ModelId) {
         try {
             val res = runner.runMission(
@@ -446,11 +490,17 @@ class OneflowSessionController(context: Context) {
         val activeId = _uiState.value.activeMission?.id
         val updatedActive = activeId?.let { missionStore.load(it) } ?: list.firstOrNull()
         val events = updatedActive?.let { missionStore.events(it.id) }.orEmpty()
+        val undoables = transactionJournal.listRecords().filter { !it.undone }.map { it.transactionId }
+        val receipt = updatedActive?.let {
+            MissionReceiptGenerator.generate(missionStore, it.id, undoableTransactions = undoables)
+        }
         _uiState.update {
             it.copy(
                 allMissions = list,
                 activeMission = updatedActive,
                 activeEvents = events,
+                activeReceipt = receipt,
+                undoableTxIds = undoables,
                 pendingApproval = updatedActive?.pendingApproval
             )
         }

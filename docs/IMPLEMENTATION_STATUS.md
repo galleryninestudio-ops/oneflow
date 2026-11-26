@@ -1,24 +1,23 @@
 # Oneflow Implementation Status
 
 ## Current Milestone Summary (§18.1 Format)
-- **Phase / milestone:** Phase 2 — FlowCode secure execution (v0.1)
-- **State:** `VERIFIED` (host JVM, real QuickJS-NG `qjs_worker` IPC, NDK `arm64-v8a` JNI APK, `lintDebug`, and physical device Shizuku install & cold launch)
+- **Phase / milestone:** Phase 3 — Intelligence, state and reliability (v0.2)
+- **State:** `VERIFIED` (host JVM, QuickJS-NG IPC, NDK APK, `lintDebug`, and Shizuku `rish` device install)
 - **Git commit / branch:** `main` (`origin`: `https://github.com/galleryninestudio-ops/oneflow`)
 - **Implemented real capabilities:**
-  - `:capabilities:files`: `WorkspacePathGuard` (realpath & symlink escape protection), `ArtifactStore` (SHA-256 content-addressed storage), `TransactionJournal` (atomic local write undo), and `WorkspaceFileTools` (`fs.list`, `fs.glob`, `fs.read`, `fs.grep`, `fs.write`, `fs.patch`, `artifact.create`, `artifact.read`, `verify.file`).
-  - `:execution:flowcode` + `native/qjs-worker`: real QuickJS-NG `v0.18.0` isolated worker process (`qjs_worker`), `FlowSdkGenerator`, `QuickJsProcessScriptEngine`, `FlowCodeTools` (`discover`, `execute`, `mission.status`).
-  - `:app`: NDK `arm64-v8a` JNI `liboneflow_qjs.so` inside `FlowCodeIsolatedWorkerService` (`android:isolatedProcess="true"`), scoped workspace permission toggles, and `RestrictedWorkspacePreviewCard` (`https://oneflow-preview.invalid/`, JS disabled).
+  - `:core:intelligence`: `TaskDag` (cycle detection + ready scheduling + failure blocking), `FlowMindPlanner`, `ScopedMemoryStore` (cross-workspace isolation + supersession), `FlowWorld` (TTL freshness & invalidation), `DeterministicContextIndex`, `SkillPackageParser` + `FlowHookRegistry` (untrusted repo isolation + fail-closed security hooks), `FlowReplayEngine` (zero-side-effect read-only replay + grant-cleared fork), `MissionReceiptGenerator`.
+  - `:core:kernel`: `MissionController.updateRequirements` with CAS `requirementsRevision` conflict protection.
+  - `:app`: `MissionsTab` wired with `MissionReceipt`, `Read-Only Replay`, `Fork`, and `TransactionJournal.undo`.
 - **Acceptance criteria passed / failed / not run:**
-  - Passed: `25/25` tests, `:app:lintDebug`, `:app:assembleDebug` + NDK CMake, pure-core import check, and `rish` Shizuku install/launch (`932ms`, zero crashes).
-  - Baseline comparison recorded: batched FlowCode (`discover` + 1 `execute` + summary) completed the responsive website task in `3` model turns vs `5+` sequential direct tool turns.
+  - Passed: `30/30` tests across 11 suites, `:app:lintDebug`, `:app:assembleDebug` (`14,533,070` bytes), pure-core import check.
 - **Commands and actual test results:** Recorded in `docs/TEST_EVIDENCE.md`.
-- **Environment (host, Android SDK/target, ABI, device, provider):** Linux `6.12.69` `aarch64` Android 16; `adev` Ubuntu 24.04; OpenJDK `21.0.13.1`; Gradle `9.9.2`; AGP `9.5.3`; NDK `28.2.13676358`; physical device `rish` (`uid=2000`).
+- **Environment (host, Android SDK/target, ABI, device, provider):** Linux `6.12.69` `aarch64` Android 16; `adev` Ubuntu 24.04; OpenJDK `21.0.13.1`; Gradle `9.9.2`; AGP `9.5.3`; NDK `28.2.13676358`.
 - **Evidence paths / artifacts / screenshots:** `docs/TEST_EVIDENCE.md`, `app/build/outputs/apk/debug/app-debug.apk`.
 - **Upstream sources, pinned versions, licenses:** Recorded in `docs/DEPENDENCIES.md`.
-- **Security and privacy checks:** Traversal, symlink escape, ambient globals (`require`/`std`/`os`/`fetch`), infinite-loop interrupt, heap cap, output truncation, denied-permission zero mutation, and restricted WebView origin verified.
-- **Known blockers, limitations, assumptions:** Live external LLM API test still requires a user-supplied key (loopback fixture & `MockWebServer` verified).
+- **Security and privacy checks:** Cross-workspace memory isolation, untrusted repo skill/hook rejection, fail-closed security hooks, zero-side-effect replay, and fork grant clearing verified in `Phase3IntelligenceTest`.
+- **Known blockers, limitations, assumptions:** Live external LLM API test still requires a user-supplied key.
 - **Deviations from this spec and ADR link:** `ADR-0001`..`ADR-0006` in `docs/DECISIONS.md`.
-- **Next smallest vertical slice / ticket:** `OF-0004` — Phase 3: `:core:intelligence` (`TaskDagScheduler`, `FlowMind`, `FlowMemory`, `FlowWorld`, `ContextIndex`, `FlowSkills`, `FlowHooks`, `FlowReplay`, `MissionReceipt`) + UI trace/replay/undo.
+- **Next smallest vertical slice / ticket:** `OF-0005` — Phase 4: Native development environment (`FlowRuntime` structured launcher, `FlowPkg` signed manifest verification, `FlowEnvironment` project detector, and Git/editor/terminal foundation).
 
 ---
 
@@ -26,7 +25,7 @@
 - **Phase 0 — Feasibility and foundation (v0.0.1):** `VERIFIED`
 - **Phase 1 — Own agent kernel + BYO API (v0.1-alpha):** `VERIFIED`
 - **Phase 2 — FlowCode secure execution (v0.1):** `VERIFIED`
-- **Phase 3 — Intelligence, state and reliability (v0.2):** `IN_PROGRESS` (starting now)
+- **Phase 3 — Intelligence, state and reliability (v0.2):** `VERIFIED`
 - **Phase 4 — Native development environment (v0.3):** `NOT_STARTED`
 - **Phase 5 — FlowWeb, FlowBrowser, research (v0.4):** `NOT_STARTED`
 - **Phase 6 — Android computer use (v0.5):** `NOT_STARTED`

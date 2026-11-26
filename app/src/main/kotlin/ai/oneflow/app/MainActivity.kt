@@ -383,7 +383,7 @@ private fun MissionsTab(
                             style = MaterialTheme.typography.bodySmall,
                             color = OneflowColors.TextSecondary
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                             OutlinedButton(onClick = {
                                 controller.selectAndResumeMission(m.id, runImmediately = false)
                                 onOpenChat()
@@ -394,7 +394,56 @@ private fun MissionsTab(
                                     onOpenChat()
                                 }) { Text("Resume") }
                             }
+                            OutlinedButton(onClick = { controller.replayMissionReadOnly(m.id) }) { Text("Replay") }
+                            OutlinedButton(onClick = { controller.forkMission(m.id) }) { Text("Fork") }
                         }
+                    }
+                }
+            }
+        }
+
+        state.activeReceipt?.let { rec ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = OneflowColors.Surface),
+                border = BorderStroke(1.dp, OneflowColors.Border),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(12.dp)) {
+                    Text("Mission Receipt", style = MaterialTheme.typography.titleSmall, color = OneflowColors.TextPrimary)
+                    Text(
+                        "reqRev=${rec.requirementsRevision} • state=${rec.finalState} • observedEffects=${rec.toolCallsObserved} • events=${rec.eventCount}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = OneflowColors.TextSecondary
+                    )
+                    if (rec.undoableTransactions.isNotEmpty()) {
+                        OutlinedButton(onClick = { controller.undoTransaction(rec.undoableTransactions.first()) }) {
+                            Text("Undo Latest Local Write (${rec.undoableTransactions.size} available)")
+                        }
+                    }
+                }
+            }
+        }
+
+        state.replayReport?.let { rep ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = OneflowColors.SurfaceElevated),
+                border = BorderStroke(1.dp, OneflowColors.Border),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        "Read-Only Replay (${rep.frames.size} frames, externalSideEffects=${rep.externalSideEffectsExecuted})",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = OneflowColors.Success
+                    )
+                    for (frame in rep.frames.takeLast(10)) {
+                        Text(
+                            "#${frame.sequence} ${frame.eventType} -> ${frame.stateAfter ?: "?"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = OneflowColors.TextSecondary
+                        )
                     }
                 }
             }

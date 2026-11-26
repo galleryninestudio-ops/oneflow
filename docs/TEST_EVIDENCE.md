@@ -78,6 +78,18 @@
 - **Command:** `pm install -r` + `am start -W -n ai.oneflow.app/.MainActivity`
 - **Observed Result:** `Success`, `LaunchState: COLD`, `TotalTime: 932ms`, PID `12273`, clean `logcat` (no fatal/uncaught exceptions).
 
+---
+
+## Phase 3 — Intelligence, State & Reliability (`v0.2`, 2026-11-26)
+
+### TEST-301: Phase 3 Core Intelligence, Kernel Revisions, Replay, Lint & APK
+- **Environment:** `adev` Ubuntu 24.04 `aarch64`, OpenJDK `21.0.13.1`, Gradle `9.9.2`, AGP `9.5.3`, NDK `28.2.13676358`
+- **Command:** `adev './gradlew :core:contracts:test :core:kernel:test :core:models:test :core:intelligence:test :execution:broker:test :execution:flowcode:test :capabilities:files:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain'`
+- **Observed Result (exit 0, `BUILD SUCCESSFUL in 2m 39s`):**
+  - `30/30` tests passing (`0` failures, `0` errors, `0` skipped), including `Phase3IntelligenceTest` (5 tests: DAG cycle rejection + blocked propagation, scoped memory cross-workspace isolation + supersession + `FlowWorld` TTL expiration, untrusted repo skill/hook rejection + fail-closed security hooks, read-only `FlowReplayEngine` zero side effects + grant-cleared `forkMission` + `REVISION_CONFLICT` on stale `requirementsRevision`, deterministic `ContextIndex` + `FlowMindPlanner`).
+  - `:app:lintDebug` passed; `:app:assembleDebug` -> `app-debug.apk` (`14,533,070` bytes).
+  - Pure-core isolation: `grep -rn "import android\." core/ execution/ capabilities/` -> 0 matches.
+
 ### ARCH-001: Pure Core Boundary Check
 - **Command:** `grep -rn "import android\." core/ execution/`
 - **Observed Result:** Zero matches (`PASS: zero android.* imports in core/ and execution/`).

@@ -435,4 +435,51 @@ class MissionController(
             is KernelResult.Ok -> KernelResult.Ok(finalRes.value to result)
         }
     }
+
+    suspend fun updateRequirements(
+        missionId: MissionId,
+        expectedRequirementsRevision: Long,
+        newObjective: String,
+        newCriteria: List<ai.oneflow.core.contracts.AcceptanceCriterion>? = null
+    ): KernelResult<MissionStateSnapshot> {
+        val current = store.load(missionId)
+            ?: return KernelResult.Err(FlowError(ErrorCode.UNAVAILABLE, "Mission ${missionId.value} not found"))
+        if (current.state.isTerminal) {
+            return KernelResult.Err(FlowError(ErrorCode.INVALID_ARGUMENT, "Cannot update requirements on terminal mission"))
+        }
+        if (current.requirementsRevision != expectedRequirementsRevision) {
+            return KernelResult.Err(
+                FlowError(
+                    ErrorCode.REVISION_CONFLICT,
+                    "Requirements revision conflict: expected=$expectedRequirementsRevision actual=${current.requirementsRevision}"
+                )
+            )
+        }
+        val now = clockEpochMs()
+        val nextReqRev = current.requirementsRevision + 1L
+        val nextState = current.copy(
+            objective = newObjective,
+            requirementsRevision = nextReqRev,
+            stateRevision = current.stateRevision + 1L,
+            acceptanceCriteria = newCriteria ?: current.acceptanceCriteria,
+            updatedAtEpochMs = now
+        )
+        val nextSeq = (store.events(missionId).lastOrNull()?.sequence ?: 0L) + 1L
+        store.append(
+            MissionEventEnvelope(
+                eventId = EventId("e-${UUID.randomUUID()}"),
+                sequence = nextSeq,
+                timestampEpochMs = now,
+                missionId = missionId,
+                type = "mission.requirements_updated",
+                actorSource = "user",
+                payload = buildJsonObject {
+                    put("requirementsRevision", JsonPrimitive(nextReqRev))
+                    put("objective", JsonPrimitive(newObjective))
+                }
+            ),
+            nextState
+        )
+        return KernelResult.Ok(nextState)
+    }
 }

@@ -44,6 +44,7 @@ dependencies {
     implementation(project(":core:contracts"))
     implementation(project(":core:kernel"))
     implementation(project(":core:models"))
+    implementation(project(":core:intelligence"))
     implementation(project(":execution:broker"))
     implementation(project(":execution:flowcode"))
     implementation(project(":capabilities:files"))

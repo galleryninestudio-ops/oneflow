@@ -19,6 +19,7 @@ rootProject.name = "oneflow"
 include(":core:contracts")
 include(":core:kernel")
 include(":core:models")
+include(":core:intelligence")
 include(":execution:broker")
 include(":execution:flowcode")
 include(":capabilities:files")
