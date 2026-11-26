@@ -10,6 +10,9 @@ import ai.oneflow.app.probe.CapabilityProbe
 import ai.oneflow.app.probe.Phase0Diagnostics
 import ai.oneflow.app.vault.AndroidKeystoreVault
 import ai.oneflow.app.worker.AndroidIsolatedQuickJsEngine
+import ai.oneflow.capabilities.builder.BuilderTools
+import ai.oneflow.capabilities.builder.FlowForgeRegistry
+import ai.oneflow.capabilities.builder.ReaAdapter
 import ai.oneflow.capabilities.computeruse.ComputerUseTools
 import ai.oneflow.capabilities.computeruse.FlowAccessRouter
 import ai.oneflow.capabilities.computeruse.MediaProjectionState
@@ -153,6 +156,10 @@ class OneflowSessionController(context: Context) {
     }
     val flowAccessRouter = FlowAccessRouter(OneflowAccessibilityService.backend)
     private val computerUseTools = ComputerUseTools(flowAccessRouter).also {
+        it.registerAll(toolBroker)
+    }
+    private val forgeRegistry = FlowForgeRegistry()
+    private val builderTools = BuilderTools(ReaAdapter(), forgeRegistry, workspaceDir.toPath()).also {
         it.registerAll(toolBroker)
     }
     val mediaProjectionManager = MediaProjectionConsentManager(appContext, flowAccessRouter)

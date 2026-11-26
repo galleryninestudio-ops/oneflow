@@ -92,6 +92,18 @@
 
 ---
 
+## Phase 7 — REA, FlowForge & FlowTeach (`v0.6`, 2026-11-26)
+
+### TEST-701: ReaAdapter, FlowForge Static Gate & Rollback, FlowTeach Sensitive Exclusion & SDK
+- **Commands:**
+  - `grep -rn "import android\." core/ execution/ capabilities/ platform/` -> `PURE_CORE_OK` (0 matches)
+  - `adev './gradlew :core:contracts:test :core:kernel:test :core:models:test :core:intelligence:test :execution:broker:test :execution:flowcode:test :capabilities:files:test :platform:runtime:test :capabilities:development:test :capabilities:research:test :capabilities:computer-use:test :capabilities:builder:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain'`
+- **Observed Result (exit 0, `BUILD SUCCESSFUL in 2m 16s`):**
+  - `43/43` tests passing (`0` failures, `0` errors, `0` skipped across 15 suites), including `Phase7BuilderTest` (4 tests: `ReaAdapter` honest unavailable reporting, `FlowForgeStaticScanner` blocking `ProcessBuilder`/`http://`/`eval` + v2->v1 rollback, `FlowTeachCompiler` sensitive-step exclusion & JS compilation, and `SafeToolBroker` static-gate enforcement).
+  - `:app:lintDebug` passed (`0` errors); `:app:assembleDebug` built `app-debug.apk`.
+
+---
+
 ## Phase 6 — Android Computer Use (`v0.5`, 2026-11-26)
 
 ### TEST-601: FlowAccessRouter, Redaction, Stale Refs, Emergency Stop, Shizuku & MediaProjection

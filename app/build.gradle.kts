@@ -51,6 +51,7 @@ dependencies {
     implementation(project(":capabilities:development"))
     implementation(project(":capabilities:research"))
     implementation(project(":capabilities:computer-use"))
+    implementation(project(":capabilities:builder"))
     implementation(project(":platform:runtime"))
 
     implementation(libs.androidx.core.ktx)
