@@ -27,9 +27,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -47,6 +49,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedSecureTextField
 import androidx.compose.material3.OutlinedTextField
@@ -65,8 +69,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -98,59 +106,190 @@ private fun OneflowRootScreen(
     controller: OneflowSessionController
 ) {
     var selectedTab by remember { mutableIntStateOf(if (state.providerState.onboardingCompleted) 0 else 4) }
+    var paletteOpen by remember { mutableStateOf(false) }
 
-    Scaffold(
-        containerColor = OneflowColors.Background,
-        bottomBar = {
-            NavigationBar(containerColor = OneflowColors.Surface) {
-                NavigationBarItem(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    icon = { Text("Chat") },
-                    label = { Text("Chat") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    icon = { Text("Missions") },
-                    label = { Text("Missions (${state.allMissions.size})") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 2,
-                    onClick = {
-                        controller.refreshWorkspaceFiles()
-                        selectedTab = 2
-                    },
-                    icon = { Text("Files") },
-                    label = { Text("Workspace") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 3,
-                    onClick = { selectedTab = 3 },
-                    icon = { Text("Web") },
-                    label = { Text("Research") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 4,
-                    onClick = { selectedTab = 4 },
-                    icon = { Text("Setup") },
-                    label = { Text("Setup") }
-                )
+    val navItems = listOf(
+        0 to "Chat",
+        1 to "Missions (${state.allMissions.size})",
+        2 to "Workspace",
+        3 to "Research",
+        4 to "Setup"
+    )
+
+    if (paletteOpen) {
+        CommandPaletteDialog(
+            onDismiss = { paletteOpen = false },
+            onSelectTab = { idx ->
+                if (idx == 2) controller.refreshWorkspaceFiles()
+                selectedTab = idx
+                paletteOpen = false
+            },
+            onEmergencyStop = {
+                controller.triggerEmergencyStop()
+                paletteOpen = false
+            },
+            onRefreshStatus = {
+                controller.refreshComputerUseStatus()
+                controller.refreshWorkspaceFiles()
+                paletteOpen = false
+            },
+            onLoadFixture = {
+                controller.enableLocalTestFixture()
+                paletteOpen = false
             }
-        },
-        modifier = Modifier.fillMaxSize()
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
+        )
+    }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isWide = maxWidth >= 700.dp
+
+        Scaffold(
+            containerColor = OneflowColors.Background,
+            bottomBar = {
+                if (!isWide) {
+                    NavigationBar(containerColor = OneflowColors.Surface) {
+                        for ((idx, label) in navItems) {
+                            NavigationBarItem(
+                                selected = selectedTab == idx,
+                                onClick = {
+                                    if (idx == 2) controller.refreshWorkspaceFiles()
+                                    selectedTab = idx
+                                },
+                                icon = { Text(label.substringBefore(" ")) },
+                                label = { Text(label) },
+                                modifier = Modifier.semantics { contentDescription = "Navigate to $label tab" }
+                            )
+                        }
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        ) { innerPadding ->
+            Row(
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .fillMaxSize()
+            ) {
+                if (isWide) {
+                    NavigationRail(
+                        containerColor = OneflowColors.Surface,
+                        modifier = Modifier.fillMaxHeight()
+                    ) {
+                        for ((idx, label) in navItems) {
+                            NavigationRailItem(
+                                selected = selectedTab == idx,
+                                onClick = {
+                                    if (idx == 2) controller.refreshWorkspaceFiles()
+                                    selectedTab = idx
+                                },
+                                icon = { Text(label.substringBefore(" ")) },
+                                label = { Text(label) },
+                                modifier = Modifier.semantics { contentDescription = "Navigate to $label tab" }
+                            )
+                        }
+                    }
+                }
+                Column(modifier = Modifier.weight(1f).fillMaxSize()) {
+                    Surface(
+                        color = OneflowColors.Surface,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = "ONEFLOW",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = OneflowColors.TextPrimary,
+                                modifier = Modifier.semantics { heading() }
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (state.emergencyStopped) {
+                                    OutlinedButton(onClick = { controller.clearEmergencyStop() }) {
+                                        Text("STOPPED", color = OneflowColors.Error)
+                                    }
+                                }
+                                OutlinedButton(
+                                    onClick = { paletteOpen = true },
+                                    modifier = Modifier.semantics { contentDescription = "Open Command Palette" }
+                                ) {
+                                    Text("Palette")
+                                }
+                            }
+                        }
+                    }
+                    HorizontalDivider(color = OneflowColors.Border)
+                    Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        when (selectedTab) {
+                            0 -> ChatTab(state = state, controller = controller, onGoSetup = { selectedTab = 4 })
+                            1 -> MissionsTab(state = state, controller = controller, onOpenChat = { selectedTab = 0 })
+                            2 -> WorkspaceTab(state = state, controller = controller)
+                            3 -> ResearchTab(state = state, controller = controller)
+                            else -> SetupTab(state = state, controller = controller)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommandPaletteDialog(
+    onDismiss: () -> Unit,
+    onSelectTab: (Int) -> Unit,
+    onEmergencyStop: () -> Unit,
+    onRefreshStatus: () -> Unit,
+    onLoadFixture: () -> Unit
+) {
+    val filterState = rememberTextFieldState("")
+    val actions = listOf(
+        "Go to Chat" to { onSelectTab(0) },
+        "Go to Missions & Replay" to { onSelectTab(1) },
+        "Go to Workspace Files & Kits" to { onSelectTab(2) },
+        "Go to FlowWeb Research & Browser" to { onSelectTab(3) },
+        "Go to Setup & Diagnostics" to { onSelectTab(4) },
+        "Trigger Emergency Stop" to onEmergencyStop,
+        "Refresh Computer Use & Files" to onRefreshStatus,
+        "Activate Local Fixture Provider" to onLoadFixture
+    )
+    val q = filterState.text.toString().trim().lowercase()
+    val filtered = actions.filter { (title, _) -> q.isEmpty() || title.lowercase().contains(q) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            color = OneflowColors.Surface,
+            border = BorderStroke(1.dp, OneflowColors.Border),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            when (selectedTab) {
-                0 -> ChatTab(state = state, controller = controller, onGoSetup = { selectedTab = 4 })
-                1 -> MissionsTab(state = state, controller = controller, onOpenChat = { selectedTab = 0 })
-                2 -> WorkspaceTab(state = state, controller = controller)
-                3 -> ResearchTab(state = state, controller = controller)
-                else -> SetupTab(state = state, controller = controller)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "Command Palette",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = OneflowColors.TextPrimary,
+                    modifier = Modifier.semantics { heading() }
+                )
+                OutlinedTextField(
+                    state = filterState,
+                    label = { Text("Filter commands") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                for ((title, act) in filtered) {
+                    OutlinedButton(
+                        onClick = act,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(title)
+                    }
+                }
+                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                    Text("Close")
+                }
             }
         }
     }

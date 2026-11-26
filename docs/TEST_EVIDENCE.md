@@ -92,6 +92,17 @@
 
 ---
 
+## Phase 9 — Complete Polished Workspace (`v0.8`, 2026-11-26)
+
+### TEST-901: Responsive NavigationRail/Bar, Command Palette, TalkBack Semantics, Lint & Device Launch
+- **Commands:**
+  - `adev './gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain'`
+  - `rish -c "pm install -r -S ..."` + `rish -c 'am force-stop ai.oneflow.app && am start -W -n ai.oneflow.app/.MainActivity'`
+- **Observed Result (exit 0, `BUILD SUCCESSFUL in 2m 20s`):**
+  - `:app:testDebugUnitTest` passed, `:app:lintDebug` passed (`0` errors), `:app:assembleDebug` built `app-debug.apk`, and Shizuku `rish` device install/launch succeeded.
+
+---
+
 ## Phase 8 — Teams, Workflows, Learning & Remote Sync (`v0.7`, 2026-11-26)
 
 ### TEST-801: AgentTeamCoordinator, FlowTriggerRegistry, FlowLearnEngine & RemoteInteropSettings
