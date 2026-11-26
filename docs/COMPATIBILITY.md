@@ -1,6 +1,6 @@
 # Oneflow Compatibility & Feasibility Matrix
 
-**Last updated:** 2026-11-26 (Phase 0 baseline verified on host & ARM64 `adev`)
+**Last updated:** 2026-11-26 (Phases 0–10 verified on host, `adev` ARM64, and physical Android 16 ARM64 device via Shizuku `rish`)
 
 ## 1. Host & Build Environment Observed
 | Component | Observed Environment | Status | Notes |
@@ -14,7 +14,7 @@
 | `d8` / `apksigner` | `D8 8.10.9-dev`, `apksigner 0.9` (Java) | VERIFIED | Run natively on ARM64 JDK 21 |
 | `aidl` / `zipalign` | x86-64 ELF in `build-tools/36.0.0` | **UNSUPPORTED_DIRECT** | Fails direct execution (`required file not found`). Binder `Parcel` avoids `aidl`; AGP `zipflinger` packs APKs |
 | Shared Storage (`/storage/emulated/0`) | `/dev/fuse` (`noexec`, no symlinks, no `chmod`) | **BLOCKED_FOR_REPO** | `git init` failed; binary execution returns `Permission denied`. Repo hosted on `f2fs` (`~/projects/oneflow`) |
-| Physical Device Runtime (`adb`) | `adb` present (`37.0.0p1-3`), awaiting explicit user consent | **DEFERRED** | User requested host tests + `assembleDebug` first; ask before `adb install` |
+| Physical Device Runtime (`rish` / `adb`) | Shizuku `uid=2000(shell)` on Android 16 ARM64 | **VERIFIED** | Installed (`pm install -r -S`) and cold-launched `ai.oneflow.app/.MainActivity` across Phases 1–9 |
 
 ## 2. Phase 0 Feasibility Experiments
 | Experiment | Scope | Status | Blocker / Finding |

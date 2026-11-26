@@ -92,6 +92,19 @@
 
 ---
 
+## Phase 10 — Production Engineering, FlowLab & Release Readiness (`v1.0.0-rc1`, 2026-11-26)
+
+### TEST-1001: FlowLab Benchmark, Security Regression, Full Suite, Lint & APK
+- **Commands:**
+  - `grep -rn "import android\." core/ execution/ capabilities/ platform/` -> `PURE_CORE_OK` (0 matches)
+  - `adev './gradlew test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain'`
+- **Observed Result (exit 0, `BUILD SUCCESSFUL in 52s`):**
+  - `48/48` tests passing (`0` failures, `0` errors, `0` skipped across 17 suites), including `Phase10FlowLabBenchmarkTest` (10-file FlowCode 1-turn batch vs 10 sequential direct-tool turns + `../../etc/passwd` traversal denial).
+  - `:app:lintDebug` passed (`0` errors); `:app:assembleDebug` built `app-debug.apk` (~15M).
+  - License & SBOM audit: all compiled dependencies in `gradle/libs.versions.toml` / `docs/DEPENDENCIES.md` are Apache-2.0, MIT, or EPL-2.0 (zero GPL/AGPL code compiled).
+
+---
+
 ## Phase 9 — Complete Polished Workspace (`v0.8`, 2026-11-26)
 
 ### TEST-901: Responsive NavigationRail/Bar, Command Palette, TalkBack Semantics, Lint & Device Launch
