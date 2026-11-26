@@ -92,6 +92,18 @@
 
 ---
 
+## Phase 8 — Teams, Workflows, Learning & Remote Sync (`v0.7`, 2026-11-26)
+
+### TEST-801: AgentTeamCoordinator, FlowTriggerRegistry, FlowLearnEngine & RemoteInteropSettings
+- **Commands:**
+  - `grep -rn "import android\." core/ execution/ capabilities/ platform/` -> `PURE_CORE_OK` (0 matches)
+  - `adev './gradlew :core:contracts:test :core:kernel:test :core:models:test :core:intelligence:test :execution:broker:test :execution:flowcode:test :capabilities:files:test :platform:runtime:test :capabilities:development:test :capabilities:research:test :capabilities:computer-use:test :capabilities:builder:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain'`
+- **Observed Result (exit 0, `BUILD SUCCESSFUL in 2m 29s`):**
+  - `47/47` tests passing (`0` failures, `0` errors, `0` skipped across 16 suites), including `Phase8TeamsWorkflowsTest` (4 tests: subagent capability/budget attenuation + resource locks, trigger dedupe/pause/history, FlowLearn eval gate + user approval gate, and default-disabled remote interop pairing/origin checks).
+  - `:app:lintDebug` passed (`0` errors); `:app:assembleDebug` built `app-debug.apk`.
+
+---
+
 ## Phase 7 — REA, FlowForge & FlowTeach (`v0.6`, 2026-11-26)
 
 ### TEST-701: ReaAdapter, FlowForge Static Gate & Rollback, FlowTeach Sensitive Exclusion & SDK
