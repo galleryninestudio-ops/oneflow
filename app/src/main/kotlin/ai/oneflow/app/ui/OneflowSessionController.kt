@@ -7,10 +7,15 @@ import ai.oneflow.app.probe.CapabilityProbe
 import ai.oneflow.app.probe.Phase0Diagnostics
 import ai.oneflow.app.vault.AndroidKeystoreVault
 import ai.oneflow.app.worker.AndroidIsolatedQuickJsEngine
+import ai.oneflow.capabilities.development.DevKitCatalog
+import ai.oneflow.capabilities.development.DevKitStatus
+import ai.oneflow.capabilities.development.DevWorkspaceTools
 import ai.oneflow.capabilities.files.ArtifactStore
 import ai.oneflow.capabilities.files.TransactionJournal
 import ai.oneflow.capabilities.files.WorkspaceFileTools
 import ai.oneflow.capabilities.files.WorkspacePathGuard
+import ai.oneflow.platform.runtime.FlowEnvironmentDetector
+import ai.oneflow.platform.runtime.WorkspaceEnvironmentManifest
 import ai.oneflow.core.contracts.AcceptanceCheckResult
 import ai.oneflow.core.contracts.MissionEventEnvelope
 import ai.oneflow.core.contracts.MissionId
@@ -70,6 +75,11 @@ data class OneflowUiState(
     val workspaceWriteGranted: Boolean = false,
     val previewEntryPath: String? = null,
     val showPreview: Boolean = false,
+    val workspaceFiles: List<String> = emptyList(),
+    val selectedEditorPath: String? = null,
+    val selectedEditorContent: String = "",
+    val environmentManifest: WorkspaceEnvironmentManifest? = null,
+    val devKits: List<DevKitStatus> = emptyList(),
     val activeMission: MissionStateSnapshot? = null,
     val activeEvents: List<MissionEventEnvelope> = emptyList(),
     val activeReceipt: MissionReceipt? = null,
@@ -104,6 +114,9 @@ class OneflowSessionController(context: Context) {
     private val toolBroker = SafeToolBroker(toolRegistry)
     private val fixtureTools: List<ModelToolSpec> = Phase1FixtureTools.registerAll(toolBroker)
     private val workspaceTools = WorkspaceFileTools(workspacePathGuard, artifactStore, transactionJournal).also {
+        it.registerAll(toolBroker)
+    }
+    private val devTools = DevWorkspaceTools(workspacePathGuard).also {
         it.registerAll(toolBroker)
     }
 
@@ -170,6 +183,7 @@ class OneflowSessionController(context: Context) {
     init {
         scope.launch(Dispatchers.IO) {
             refreshMissions()
+            refreshWorkspaceFiles()
             val saved = providerRepo.activeProfile()
             if (saved != null && saved.isLocalTestFixture) {
                 val url = fixtureServer.start()
@@ -414,12 +428,76 @@ class OneflowSessionController(context: Context) {
         scope.launch(Dispatchers.IO) {
             val ok = transactionJournal.undo(txId)
             refreshMissions()
+            refreshWorkspaceFiles()
             val hasHtml = Files.exists(workspaceDir.toPath().resolve("index.html"))
             _uiState.update {
                 it.copy(
                     previewEntryPath = if (hasHtml) "index.html" else null,
                     statusBanner = if (ok) "Undid local file transaction $txId" else "Could not undo $txId"
                 )
+            }
+        }
+    }
+
+    fun refreshWorkspaceFiles() {
+        scope.launch(Dispatchers.IO) {
+            val files = Files.walk(workspacePathGuard.rootRealPath).use { stream ->
+                stream.filter { Files.isRegularFile(it) }
+                    .map { workspacePathGuard.relativize(it) }
+                    .filter { !it.startsWith(".oneflow") }
+                    .sorted()
+                    .limit(100)
+                    .collect(java.util.stream.Collectors.toList())
+            }
+            val env = FlowEnvironmentDetector.detect(workspacePathGuard.rootRealPath)
+            val kits = DevKitCatalog.inspectHostCapabilities(isInAppSandbox = true)
+            _uiState.update {
+                it.copy(
+                    workspaceFiles = files,
+                    environmentManifest = env,
+                    devKits = kits
+                )
+            }
+        }
+    }
+
+    fun openWorkspaceFile(relativePath: String) {
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                val target = workspacePathGuard.resolveContained(relativePath)
+                target.toFile().readText(Charsets.UTF_8)
+            }.onSuccess { content ->
+                _uiState.update {
+                    it.copy(selectedEditorPath = relativePath, selectedEditorContent = content)
+                }
+            }.onFailure { err ->
+                _uiState.update { it.copy(statusBanner = "Open failed: ${err.message}") }
+            }
+        }
+    }
+
+    fun saveWorkspaceFile(relativePath: String, content: String) {
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                val target = workspacePathGuard.resolveContained(relativePath)
+                val prev = if (Files.exists(target)) Files.readAllBytes(target) else null
+                val nextBytes = content.toByteArray(Charsets.UTF_8)
+                transactionJournal.recordWrite(relativePath, prev, nextBytes)
+                Files.createDirectories(target.parent)
+                Files.write(target, nextBytes)
+            }.onSuccess {
+                refreshWorkspaceFiles()
+                refreshMissions()
+                val hasHtml = Files.exists(workspaceDir.toPath().resolve("index.html"))
+                _uiState.update {
+                    it.copy(
+                        selectedEditorContent = content,
+                        previewEntryPath = if (hasHtml) "index.html" else null,
+                        statusBanner = "Saved $relativePath (undoable via TransactionJournal)"
+                    )
+                }
+            }.onFailure { err ->
+                _uiState.update { it.copy(statusBanner = "Save failed: ${err.message}") }
             }
         }
     }
@@ -475,6 +553,7 @@ class OneflowSessionController(context: Context) {
             }
         } finally {
             refreshMissions()
+            refreshWorkspaceFiles()
             val hasHtml = Files.exists(workspaceDir.toPath().resolve("index.html"))
             _uiState.update {
                 it.copy(

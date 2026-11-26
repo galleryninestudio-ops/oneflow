@@ -90,6 +90,18 @@
   - `:app:lintDebug` passed; `:app:assembleDebug` -> `app-debug.apk` (`14,533,070` bytes).
   - Pure-core isolation: `grep -rn "import android\." core/ execution/ capabilities/` -> 0 matches.
 
+---
+
+## Phase 4 — Native Development Environment (`v0.3`, 2026-11-26)
+
+### TEST-401: FlowRuntime, FlowPkg ECDSA Verification/Rollback, Python Fixture Build/Test, Lint & APK
+- **Environment:** `adev` Ubuntu 24.04 `aarch64`, OpenJDK `21.0.13.1`, Gradle `9.9.2`, AGP `9.5.3`, Python `3.12.3`
+- **Commands:**
+  - `adev './gradlew :capabilities:development:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain'`
+- **Observed Result (exit 0, `BUILD SUCCESSFUL in 2m 8s`):**
+  - `32/32` tests passing (`0` failures, `0` errors, `0` skipped across 12 suites), including `Phase4DevelopmentTest` (2 tests: ECDSA P-256 + SHA-256 package verification, tampered payload rejection, v2 -> v1 rollback; Python fixture detection via `env.detect`, symbol extraction via `code.symbols`, approved `python3 test_calc.py` execution -> exit 0, unauthorized `sh` shell denial `DENIED`, and intentional failure -> non-zero exit code).
+  - `:app:lintDebug` passed (0 errors); `:app:assembleDebug` -> `app-debug.apk` (`14,547,480` bytes).
+
 ### ARCH-001: Pure Core Boundary Check
 - **Command:** `grep -rn "import android\." core/ execution/`
 - **Observed Result:** Zero matches (`PASS: zero android.* imports in core/ and execution/`).

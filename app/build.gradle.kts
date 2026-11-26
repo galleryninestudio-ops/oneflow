@@ -48,6 +48,8 @@ dependencies {
     implementation(project(":execution:broker"))
     implementation(project(":execution:flowcode"))
     implementation(project(":capabilities:files"))
+    implementation(project(":capabilities:development"))
+    implementation(project(":platform:runtime"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

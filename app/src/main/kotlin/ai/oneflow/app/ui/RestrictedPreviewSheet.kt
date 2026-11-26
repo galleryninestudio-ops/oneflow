@@ -99,6 +99,11 @@ fun RestrictedWorkspacePreviewCard(
                                 }
                             }
 
+                            override fun onRenderProcessGone(
+                                view: WebView?,
+                                detail: android.webkit.RenderProcessGoneDetail?
+                            ): Boolean = true
+
                             private fun blockedResponse(): WebResourceResponse =
                                 WebResourceResponse(
                                     "text/plain",

@@ -24,7 +24,7 @@ jobs:
             exit 1
           fi
       - name: Run pure JVM unit & contract tests
-        run: ./gradlew :core:contracts:test :core:kernel:test :core:models:test :core:intelligence:test :execution:broker:test :capabilities:files:test --console=plain
+        run: ./gradlew :core:contracts:test :core:kernel:test :core:models:test :core:intelligence:test :execution:broker:test :capabilities:files:test :platform:runtime:test :capabilities:development:test --console=plain
 
   native-pocs:
     runs-on: ubuntu-latest

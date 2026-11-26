@@ -81,7 +81,7 @@ private fun OneflowRootScreen(
     state: OneflowUiState,
     controller: OneflowSessionController
 ) {
-    var selectedTab by remember { mutableIntStateOf(if (state.providerState.onboardingCompleted) 0 else 2) }
+    var selectedTab by remember { mutableIntStateOf(if (state.providerState.onboardingCompleted) 0 else 3) }
 
     Scaffold(
         containerColor = OneflowColors.Background,
@@ -101,7 +101,16 @@ private fun OneflowRootScreen(
                 )
                 NavigationBarItem(
                     selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
+                    onClick = {
+                        controller.refreshWorkspaceFiles()
+                        selectedTab = 2
+                    },
+                    icon = { Text("Files") },
+                    label = { Text("Workspace") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
                     icon = { Text("Setup") },
                     label = { Text("Setup") }
                 )
@@ -115,8 +124,9 @@ private fun OneflowRootScreen(
                 .fillMaxSize()
         ) {
             when (selectedTab) {
-                0 -> ChatTab(state = state, controller = controller, onGoSetup = { selectedTab = 2 })
+                0 -> ChatTab(state = state, controller = controller, onGoSetup = { selectedTab = 3 })
                 1 -> MissionsTab(state = state, controller = controller, onOpenChat = { selectedTab = 0 })
+                2 -> WorkspaceTab(state = state, controller = controller)
                 else -> SetupTab(state = state, controller = controller)
             }
         }
@@ -458,6 +468,105 @@ private fun MissionsTab(
                     style = MaterialTheme.typography.bodySmall,
                     color = OneflowColors.TextSecondary
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceTab(
+    state: OneflowUiState,
+    controller: OneflowSessionController
+) {
+    var editorDraft by remember(state.selectedEditorPath, state.selectedEditorContent) {
+        mutableStateOf(state.selectedEditorContent)
+    }
+    var newFilePath by remember { mutableStateOf("") }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text("Workspace & Dev Kits", style = MaterialTheme.typography.titleMedium, color = OneflowColors.TextPrimary)
+            OutlinedButton(onClick = { controller.refreshWorkspaceFiles() }) { Text("Refresh") }
+        }
+
+        state.environmentManifest?.let { env ->
+            Surface(color = OneflowColors.Surface, border = BorderStroke(1.dp, OneflowColors.Border), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Environment: ${env.projectTypes.joinToString()}", style = MaterialTheme.typography.titleSmall, color = OneflowColors.TextPrimary)
+                    Text("Git branch: ${env.gitBranch ?: "none"} • AGENTS.md: ${env.hasAgentsMd}", style = MaterialTheme.typography.bodySmall, color = OneflowColors.TextSecondary)
+                }
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            OutlinedTextField(
+                value = newFilePath,
+                onValueChange = { newFilePath = it },
+                label = { Text("New file path (e.g. notes.txt)") },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+            )
+            Button(
+                enabled = newFilePath.isNotBlank(),
+                onClick = {
+                    val path = newFilePath.trim()
+                    newFilePath = ""
+                    controller.saveWorkspaceFile(path, "")
+                    controller.openWorkspaceFile(path)
+                }
+            ) { Text("Create") }
+        }
+
+        if (state.workspaceFiles.isEmpty()) {
+            Text("Workspace is empty. Create a file or run a FlowCode mission.", style = MaterialTheme.typography.bodySmall, color = OneflowColors.TextSecondary)
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                for (f in state.workspaceFiles) {
+                    OutlinedButton(onClick = { controller.openWorkspaceFile(f) }) { Text(f) }
+                }
+            }
+        }
+
+        state.selectedEditorPath?.let { path ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = OneflowColors.Surface),
+                border = BorderStroke(1.dp, OneflowColors.Border),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(12.dp)) {
+                    Text("Editing: $path", style = MaterialTheme.typography.titleSmall, color = OneflowColors.TextPrimary)
+                    OutlinedTextField(
+                        value = editorDraft,
+                        onValueChange = { editorDraft = it },
+                        minLines = 6,
+                        maxLines = 14,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Button(onClick = { controller.saveWorkspaceFile(path, editorDraft) }) {
+                        Text("Save (Undoable)")
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider(color = OneflowColors.Border)
+        Text("FlowPkg / Runtime Kit Compatibility", style = MaterialTheme.typography.titleSmall, color = OneflowColors.TextPrimary)
+        for (kit in state.devKits) {
+            Surface(color = OneflowColors.SurfaceElevated, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        Text(kit.name, style = MaterialTheme.typography.bodyMedium, color = OneflowColors.TextPrimary)
+                        Text(kit.status, style = MaterialTheme.typography.labelSmall, color = OneflowColors.Warning)
+                    }
+                    Text(kit.detail, style = MaterialTheme.typography.bodySmall, color = OneflowColors.TextSecondary)
+                }
             }
         }
     }
