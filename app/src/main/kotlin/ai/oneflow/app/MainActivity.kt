@@ -1,20 +1,20 @@
 package ai.oneflow.app
 
-import ai.oneflow.app.a2ui.A2UiParseResult
 import ai.oneflow.app.a2ui.A2UiSubsetView
 import ai.oneflow.app.a2ui.A2UiValidator
-import ai.oneflow.app.probe.CapabilityProbe
 import ai.oneflow.app.theme.OneflowColors
 import ai.oneflow.app.theme.OneflowTheme
-import ai.oneflow.core.contracts.ModelId
-import ai.oneflow.core.contracts.ProviderConfig
-import ai.oneflow.core.contracts.ProviderId
-import ai.oneflow.core.models.OpenAiCompatibleProvider
+import ai.oneflow.app.ui.OneflowSessionController
+import ai.oneflow.app.ui.OneflowUiState
+import ai.oneflow.core.contracts.ChatRole
+import ai.oneflow.core.contracts.MissionState
+import ai.oneflow.core.contracts.ProviderPresets
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,45 +25,299 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedSecureTextField
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private lateinit var controller: OneflowSessionController
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val diagnostics = CapabilityProbe.inspect(applicationContext)
+        controller = OneflowSessionController(applicationContext)
         setContent {
             OneflowTheme {
-                Scaffold(
-                    containerColor = OneflowColors.Background,
-                    modifier = Modifier.fillMaxSize()
-                ) { innerPadding ->
-                    Phase0Screen(
-                        diagnostics = diagnostics,
-                        modifier = Modifier
-                            .padding(innerPadding)
-                            .fillMaxSize()
+                val state by controller.uiState.collectAsState()
+                OneflowRootScreen(state = state, controller = controller)
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (::controller.isInitialized) controller.dispose()
+    }
+}
+
+@Composable
+private fun OneflowRootScreen(
+    state: OneflowUiState,
+    controller: OneflowSessionController
+) {
+    var selectedTab by remember { mutableIntStateOf(if (state.providerState.onboardingCompleted) 0 else 2) }
+
+    Scaffold(
+        containerColor = OneflowColors.Background,
+        bottomBar = {
+            NavigationBar(containerColor = OneflowColors.Surface) {
+                NavigationBarItem(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    icon = { Text("Chat") },
+                    label = { Text("Chat") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    icon = { Text("Missions") },
+                    label = { Text("Missions (${state.allMissions.size})") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    icon = { Text("Setup") },
+                    label = { Text("Setup") }
+                )
+            }
+        },
+        modifier = Modifier.fillMaxSize()
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+        ) {
+            when (selectedTab) {
+                0 -> ChatTab(state = state, controller = controller, onGoSetup = { selectedTab = 2 })
+                1 -> MissionsTab(state = state, controller = controller, onOpenChat = { selectedTab = 0 })
+                else -> SetupTab(state = state, controller = controller)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatTab(
+    state: OneflowUiState,
+    controller: OneflowSessionController,
+    onGoSetup: () -> Unit
+) {
+    var promptInput by remember { mutableStateOf("") }
+    val activeProfile = state.providerState.profiles.firstOrNull {
+        it.config.id.value == state.providerState.activeProviderId
+    } ?: state.providerState.profiles.firstOrNull()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column {
+                Text("ONEFLOW", style = MaterialTheme.typography.titleMedium, color = OneflowColors.TextPrimary)
+                Text(
+                    text = activeProfile?.let { "${it.config.name} • ${it.selectedModelId}" }
+                        ?: "No provider configured",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OneflowColors.TextSecondary
+                )
+            }
+            if (activeProfile == null) {
+                TextButton(onClick = onGoSetup) { Text("Configure API") }
+            }
+        }
+
+        state.statusBanner?.let { banner ->
+            Surface(
+                color = OneflowColors.Surface,
+                border = BorderStroke(1.dp, OneflowColors.Warning),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(banner, color = OneflowColors.Warning, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(10.dp))
+            }
+        }
+
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+        ) {
+            val mission = state.activeMission
+            if (mission == null) {
+                Surface(
+                    color = OneflowColors.Surface,
+                    border = BorderStroke(1.dp, OneflowColors.Border),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Phase 1 Kernel Ready. Send a prompt to start a durable mission, or configure a provider / [TEST FIXTURE] in Setup.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = OneflowColors.TextSecondary,
+                        modifier = Modifier.padding(14.dp)
                     )
+                }
+            } else {
+                Surface(
+                    color = OneflowColors.SurfaceElevated,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Mission ${mission.id.value.take(10)} • ${mission.state} • turns ${mission.usage.modelTurnsUsed}/${mission.budget.maxModelTurns} • tools ${mission.usage.toolCallsUsed}/${mission.budget.maxToolCalls}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = OneflowColors.TextSecondary,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+
+                for (entry in mission.conversation) {
+                    val roleLabel = when (entry.message.role) {
+                        ChatRole.USER -> "You"
+                        ChatRole.ASSISTANT -> "Assistant"
+                        ChatRole.TOOL -> "Tool (${entry.message.toolCallId ?: "?"})"
+                        ChatRole.SYSTEM -> "System"
+                    }
+                    Surface(
+                        color = if (entry.message.role == ChatRole.USER) OneflowColors.SurfaceElevated else OneflowColors.Surface,
+                        border = BorderStroke(1.dp, OneflowColors.Border),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(roleLabel, style = MaterialTheme.typography.labelSmall, color = OneflowColors.TextMuted)
+                            entry.message.content?.let { txt ->
+                                Spacer(Modifier.height(4.dp))
+                                Text(txt, style = MaterialTheme.typography.bodyMedium, color = OneflowColors.TextPrimary)
+                            }
+                            if (entry.message.toolCalls.isNotEmpty()) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = "Tool calls: " + entry.message.toolCalls.joinToString { "${it.name}(${it.id})" },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = OneflowColors.TextSecondary
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (state.streamingBuffer.isNotBlank() && state.isRunningMission) {
+                    Surface(
+                        color = OneflowColors.Surface,
+                        border = BorderStroke(1.dp, OneflowColors.Border),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("Streaming...", style = MaterialTheme.typography.labelSmall, color = OneflowColors.Success)
+                            Spacer(Modifier.height(4.dp))
+                            Text(state.streamingBuffer, style = MaterialTheme.typography.bodyMedium, color = OneflowColors.TextPrimary)
+                        }
+                    }
+                }
+
+                for (card in state.toolTraceCards) {
+                    Surface(
+                        color = OneflowColors.Surface,
+                        border = BorderStroke(1.dp, OneflowColors.Border),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = "${card.toolName} [${card.callId}] -> ${card.result?.status ?: "RUNNING"}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (card.result != null) OneflowColors.Success else OneflowColors.Warning
+                            )
+                            Text(card.argumentsPreview, style = MaterialTheme.typography.bodySmall, color = OneflowColors.TextSecondary)
+                        }
+                    }
+                }
+
+                state.pendingApproval?.let { approval ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = OneflowColors.SurfaceElevated),
+                        border = BorderStroke(1.dp, OneflowColors.Warning),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(14.dp)) {
+                            Text("Approval Required (${approval.risk})", style = MaterialTheme.typography.titleSmall, color = OneflowColors.Warning)
+                            Text("Tool: ${approval.toolId}@${approval.toolVersion}", style = MaterialTheme.typography.bodyMedium, color = OneflowColors.TextPrimary)
+                            Text(approval.reason, style = MaterialTheme.typography.bodySmall, color = OneflowColors.TextSecondary)
+                            Text("Target args: ${approval.redactedTarget}", style = MaterialTheme.typography.bodySmall, color = OneflowColors.TextMuted)
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Button(onClick = { controller.resolveApproval(true) }) { Text("Approve Once") }
+                                OutlinedButton(onClick = { controller.resolveApproval(false) }) { Text("Deny") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            OutlinedTextField(
+                value = promptInput,
+                onValueChange = { promptInput = it },
+                label = { Text("Mission objective (try 'add' or 'approval')") },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+            )
+            if (state.isRunningMission) {
+                OutlinedButton(onClick = { controller.cancelActiveMission() }) { Text("Stop") }
+            } else {
+                Button(
+                    enabled = promptInput.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = OneflowColors.TextPrimary,
+                        contentColor = OneflowColors.Background
+                    ),
+                    onClick = {
+                        val p = promptInput
+                        promptInput = ""
+                        controller.startNewMission(p)
+                    }
+                ) {
+                    Text("Run")
                 }
             }
         }
@@ -71,31 +325,94 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun Phase0Screen(
-    diagnostics: ai.oneflow.app.probe.Phase0Diagnostics,
-    modifier: Modifier = Modifier
+private fun MissionsTab(
+    state: OneflowUiState,
+    controller: OneflowSessionController,
+    onOpenChat: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
-    var baseUrl by remember { mutableStateOf("https://api.openai.com/v1") }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        Text("Durable Missions (FileMissionStore)", style = MaterialTheme.typography.titleMedium, color = OneflowColors.TextPrimary)
+        if (state.allMissions.isEmpty()) {
+            Text("No persisted missions yet.", style = MaterialTheme.typography.bodySmall, color = OneflowColors.TextSecondary)
+        } else {
+            for (m in state.allMissions) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = OneflowColors.Surface),
+                    border = BorderStroke(1.dp, OneflowColors.Border),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(12.dp)) {
+                        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                            Text(m.objective.take(48), style = MaterialTheme.typography.titleSmall, color = OneflowColors.TextPrimary)
+                            Text(m.state.name, style = MaterialTheme.typography.labelSmall, color = OneflowColors.Warning)
+                        }
+                        Text(
+                            "rev=${m.stateRevision} • turns=${m.usage.modelTurnsUsed}/${m.budget.maxModelTurns} • tools=${m.usage.toolCallsUsed}/${m.budget.maxToolCalls} • usage=${m.usage.usageAccuracy}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = OneflowColors.TextSecondary
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = {
+                                controller.selectAndResumeMission(m.id, runImmediately = false)
+                                onOpenChat()
+                            }) { Text("Inspect") }
+                            if (!m.state.isTerminal && m.state != MissionState.WAITING_PERMISSION) {
+                                Button(onClick = {
+                                    controller.selectAndResumeMission(m.id, runImmediately = true)
+                                    onOpenChat()
+                                }) { Text("Resume") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (state.activeEvents.isNotEmpty()) {
+            HorizontalDivider(color = OneflowColors.Border)
+            Text("Selected Mission Event Journal (${state.activeEvents.size})", style = MaterialTheme.typography.titleSmall, color = OneflowColors.TextPrimary)
+            for (ev in state.activeEvents.takeLast(20)) {
+                Text(
+                    "#${ev.sequence} ${ev.type} [${ev.actorSource}] effect=${ev.effectStatus}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OneflowColors.TextSecondary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SetupTab(
+    state: OneflowUiState,
+    controller: OneflowSessionController
+) {
+    var selectedPreset by remember { mutableStateOf(ProviderPresets.all.first()) }
+    var baseUrl by remember { mutableStateOf(selectedPreset.defaultBaseUrl) }
+    var modelId by remember { mutableStateOf("") }
     val apiKeyState = rememberTextFieldState()
-    var connectionStatus by remember { mutableStateOf("Disconnected — enter an OpenAI-compatible URL and API key to probe /models") }
-    var isProbing by remember { mutableStateOf(false) }
 
     val sampleA2Ui = remember {
         A2UiValidator.parseSurface(
             """
             {
               "version": "1.0",
-              "surfaceId": "phase0-status",
+              "surfaceId": "phase1-status",
               "rootId": "root",
               "components": [
                 {"id": "root", "component": "Card", "title": "A2UI Validated Subset Probe", "child": "col"},
-                {"id": "col", "component": "Column", "children": ["row", "div", "desc"]},
+                {"id": "col", "component": "Column", "children": ["row", "desc"]},
                 {"id": "row", "component": "Row", "children": ["b1", "b2"]},
                 {"id": "b1", "component": "StatusBadge", "label": "Schema Verified", "tone": "success"},
                 {"id": "b2", "component": "StatusBadge", "label": "No Local LLM", "tone": "neutral"},
-                {"id": "div", "component": "Divider"},
-                {"id": "desc", "component": "Text", "text": "Allowlisted Compose subset parsed cleanly without HTML/JS execution.", "style": "caption"}
+                {"id": "desc", "component": "Text", "text": "Allowlisted Compose subset active without HTML/JS.", "style": "caption"}
               ]
             }
             """.trimIndent()
@@ -104,17 +421,14 @@ private fun Phase0Screen(
 
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = modifier
+        modifier = Modifier
+            .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
+        Text("Provider & FlowVault Setup", style = MaterialTheme.typography.titleMedium, color = OneflowColors.TextPrimary)
         Text(
-            text = "ONEFLOW",
-            style = MaterialTheme.typography.headlineSmall,
-            color = OneflowColors.TextPrimary
-        )
-        Text(
-            text = "Phase 0 Foundation (v0.0.1) • ${diagnostics.appId} • API ${diagnostics.sdkInt} • ${diagnostics.abis}",
+            "Phase 1 • ${state.diagnostics.appId} • API ${state.diagnostics.sdkInt} • ${state.diagnostics.abis}",
             style = MaterialTheme.typography.bodySmall,
             color = OneflowColors.TextSecondary
         )
@@ -125,62 +439,75 @@ private fun Phase0Screen(
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.padding(14.dp)
-            ) {
-                Text(
-                    text = "External Model Gateway (BYO API)",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = OneflowColors.TextPrimary
-                )
-                Text(
-                    text = connectionStatus,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = OneflowColors.TextSecondary
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(14.dp)) {
+                Text(state.providerStatusMessage, style = MaterialTheme.typography.bodySmall, color = OneflowColors.TextSecondary)
+
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    for (preset in ProviderPresets.all) {
+                        OutlinedButton(
+                            onClick = {
+                                selectedPreset = preset
+                                baseUrl = preset.defaultBaseUrl
+                            }
+                        ) { Text(preset.displayName) }
+                    }
+                }
+
                 OutlinedTextField(
                     value = baseUrl,
                     onValueChange = { baseUrl = it },
-                    label = { Text("Base URL") },
+                    label = { Text("Base URL (${selectedPreset.displayName})") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = modelId,
+                    onValueChange = { modelId = it },
+                    label = { Text("Model ID (manual or discovered)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedSecureTextField(
                     state = apiKeyState,
-                    label = { Text("API Key (kept in memory only in Phase 0)") },
+                    label = {
+                        val stored = controller.hasStoredKey("provider_${selectedPreset.id}")
+                        Text(if (stored) "API Key (encrypted in Keystore — enter to replace)" else "API Key (encrypted in Keystore)")
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
-                Button(
-                    enabled = !isProbing,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = OneflowColors.TextPrimary,
-                        contentColor = OneflowColors.Background
-                    ),
-                    onClick = {
-                        isProbing = true
-                        connectionStatus = "Probing GET /models..."
-                        scope.launch {
-                            val provider = OpenAiCompatibleProvider(
-                                config = ProviderConfig(
-                                    id = ProviderId("manual"),
-                                    name = "User Endpoint",
-                                    baseUrl = baseUrl.trim(),
-                                    keyAlias = "memory-only",
-                                    defaultModel = ModelId("unknown")
-                                ),
-                                apiKeyProvider = { apiKeyState.text.toString() }
-                            )
-                            val result = provider.listModels()
-                            connectionStatus = result.fold(
-                                onSuccess = { cat -> "Connected: ${cat.models.size} models discovered from ${cat.source}" },
-                                onFailure = { err -> "Probe failed: ${err.message ?: "unknown error"}" }
-                            )
-                            isProbing = false
+
+                if (state.discoveredModels.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        for (m in state.discoveredModels.take(12)) {
+                            OutlinedButton(onClick = { modelId = m }) { Text(m) }
                         }
                     }
-                ) {
-                    Text(if (isProbing) "Testing..." else "Test Connection (/models)")
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        enabled = !state.isTestingProvider,
+                        onClick = {
+                            val key = apiKeyState.text.toString()
+                            apiKeyState.clearText()
+                            controller.saveAndProbeProvider(
+                                presetId = selectedPreset.id,
+                                displayName = selectedPreset.displayName,
+                                baseUrl = baseUrl,
+                                modelId = modelId,
+                                rawApiKey = key.ifBlank { null }
+                            )
+                        }
+                    ) { Text(if (state.isTestingProvider) "Testing..." else "Save & Probe /models") }
+
+                    OutlinedButton(onClick = { controller.deleteProvider(selectedPreset.id) }) {
+                        Text("Delete Key")
+                    }
+                }
+
+                HorizontalDivider(color = OneflowColors.Border)
+                OutlinedButton(onClick = { controller.enableLocalTestFixture() }) {
+                    Text("Use Local Test Fixture Server (No Real LLM)")
                 }
             }
         }
@@ -191,30 +518,15 @@ private fun Phase0Screen(
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(14.dp)
-            ) {
-                Text(
-                    text = "Phase 0 Capability & Isolation Status",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = OneflowColors.TextPrimary
-                )
-                for (item in diagnostics.capabilities) {
-                    Surface(
-                        color = OneflowColors.SurfaceElevated,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(14.dp)) {
+                Text("Capability & Feature Flags", style = MaterialTheme.typography.titleSmall, color = OneflowColors.TextPrimary)
+                for (item in state.diagnostics.capabilities) {
+                    Surface(color = OneflowColors.SurfaceElevated, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(10.dp)) {
-                            Row(
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
+                            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                                 Text(item.name, style = MaterialTheme.typography.bodyMedium, color = OneflowColors.TextPrimary)
                                 Text(item.status, style = MaterialTheme.typography.labelSmall, color = OneflowColors.Warning)
                             }
-                            Spacer(Modifier.height(2.dp))
                             Text(item.detail, style = MaterialTheme.typography.bodySmall, color = OneflowColors.TextSecondary)
                         }
                     }

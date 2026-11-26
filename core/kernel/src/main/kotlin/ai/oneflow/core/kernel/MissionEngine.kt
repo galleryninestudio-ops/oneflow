@@ -49,6 +49,10 @@ class InMemoryMissionStore : MissionStore {
         missions[id]
     }
 
+    override suspend fun listMissions(): List<MissionStateSnapshot> = mutex.withLock {
+        missions.values.sortedByDescending { it.updatedAtEpochMs }
+    }
+
     override suspend fun append(event: MissionEventEnvelope, updatedState: MissionStateSnapshot?) {
         mutex.withLock {
             val current = missions[event.missionId]
@@ -104,6 +108,18 @@ class FileMissionStore(
         val snap = snapshotFile(id)
         if (!Files.exists(snap)) return@withLock null
         json.decodeFromString<MissionStateSnapshot>(Files.readString(snap))
+    }
+
+    override suspend fun listMissions(): List<MissionStateSnapshot> = mutex.withLock {
+        if (!Files.exists(rootDir)) return@withLock emptyList()
+        Files.list(rootDir).use { stream ->
+            stream.filter { Files.isDirectory(it) }
+                .map { it.resolve("snapshot.json") }
+                .filter { Files.exists(it) }
+                .map { json.decodeFromString<MissionStateSnapshot>(Files.readString(it)) }
+                .toList()
+                .sortedByDescending { it.updatedAtEpochMs }
+        }
     }
 
     override suspend fun append(event: MissionEventEnvelope, updatedState: MissionStateSnapshot?) {

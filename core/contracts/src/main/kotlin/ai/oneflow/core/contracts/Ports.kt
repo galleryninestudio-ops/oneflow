@@ -63,6 +63,7 @@ interface ScriptEngine {
 interface MissionStore {
     suspend fun create(mission: MissionStateSnapshot)
     suspend fun load(id: MissionId): MissionStateSnapshot?
+    suspend fun listMissions(): List<MissionStateSnapshot>
     suspend fun append(event: MissionEventEnvelope, updatedState: MissionStateSnapshot? = null)
     suspend fun events(id: MissionId): List<MissionEventEnvelope>
 }

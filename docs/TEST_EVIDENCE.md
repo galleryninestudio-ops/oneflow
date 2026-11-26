@@ -35,6 +35,30 @@
 - **Command:** `adev './gradlew :app:lintDebug --console=plain'`
 - **Observed Result:** Exit 0 (`BUILD SUCCESSFUL in 1m 33s`, report at `app/build/reports/lint-results-debug.html`)
 
+---
+
+## Phase 1 — Own Agent Kernel + BYO API (`v0.1-alpha`, 2026-11-26)
+
+### TEST-101: Full Phase 1 JVM + Android Unit Tests, Lint, and Debug APK
+- **Environment:** `adev` Ubuntu 24.04 `aarch64`, OpenJDK `21.0.13.1`, Gradle `9.9.2`, AGP `9.5.3`, Kotlin `2.4.21`
+- **Command:** `adev './gradlew :core:contracts:test :core:kernel:test :core:models:test :execution:broker:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain'`
+- **Observed Result (exit 0, `BUILD SUCCESSFUL in 1m 43s`):**
+  - `ai.oneflow.core.contracts.ContractsTest`: 4 tests, 0 failures, 0 errors, 0 skipped
+  - `ai.oneflow.core.kernel.MissionEngineTest`: 3 tests, 0 failures, 0 errors, 0 skipped
+  - `ai.oneflow.core.kernel.MissionRunnerIntegrationTest`: 5 tests, 0 failures, 0 errors, 0 skipped (`MockWebServer` SSE tool loop, `WAITING_PERMISSION` approval pause/resume, `effect.intent` crash reconciliation as `UNKNOWN_OUTCOME`, context compaction + secret redaction, budget pause + coroutine cancellation)
+  - `ai.oneflow.core.models.OpenAiProviderTest`: 3 tests, 0 failures, 0 errors, 0 skipped
+  - `ai.oneflow.execution.broker.BrokerEngineTest`: 3 tests, 0 failures, 0 errors, 0 skipped
+  - `ai.oneflow.app.a2ui.A2UiValidatorTest`: 2 tests, 0 failures, 0 errors, 0 skipped
+  - `ai.oneflow.app.data.LocalFixtureServerTest`: 1 test, 0 failures, 0 errors, 0 skipped (loopback HTTP+SSE `LocalFixtureServer` end-to-end tool loop)
+  - `ai.oneflow.app.data.ProviderRepositoryTest`: 1 test, 0 failures, 0 errors, 0 skipped (verifies raw API key never written to JSON store)
+  - **Total:** `22` tests, `0` failures, `0` errors, `0` skipped
+  - **APK Artifact:** `app/build/outputs/apk/debug/app-debug.apk` (`13,018,025` bytes)
+  - **Pure-Core Check:** `grep -rn "import android\." core/ execution/` -> 0 matches.
+
+### CI-001: GitHub Actions (`Oneflow Host & Android CI`)
+- **Repository:** `https://github.com/galleryninestudio-ops/oneflow` (`PUBLIC`, branch `main`)
+- **Observed Result:** Push run `4579624...` (`feat(phase0): ...`) completed green (`✓`, 2m 32s).
+
 ### ARCH-001: Pure Core Boundary Check
 - **Command:** `grep -rn "import android\." core/ execution/`
 - **Observed Result:** Zero matches (`PASS: zero android.* imports in core/ and execution/`).

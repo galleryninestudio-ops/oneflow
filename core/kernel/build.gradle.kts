@@ -13,6 +13,9 @@ dependencies {
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(project(":core:models"))
+    testImplementation(project(":execution:broker"))
+    testImplementation(libs.okhttp.mockwebserver3)
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
